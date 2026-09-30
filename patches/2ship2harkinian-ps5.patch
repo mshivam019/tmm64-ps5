@@ -1,0 +1,905 @@
+diff --git a/CMakeLists.txt b/CMakeLists.txt
+index a9378e8..612df1f 100644
+--- a/CMakeLists.txt
++++ b/CMakeLists.txt
+@@ -184,8 +184,10 @@ if (CMAKE_CXX_COMPILER_ID MATCHES "Clang|AppleClang|GNU|MSVC")
+     endif()
+ endif()
+ 
++if(NOT CMAKE_SYSTEM_NAME STREQUAL "PS5")
+ add_subdirectory(ZAPDTR/ZAPD ${CMAKE_BINARY_DIR}/ZAPD)
+ add_subdirectory(OTRExporter)
++endif()
+ add_subdirectory(mm)
+ 
+ set_property(TARGET 2ship PROPERTY APPIMAGE_DESKTOP_FILE_TERMINAL YES)
+@@ -204,6 +206,7 @@ install(DIRECTORY "${CMAKE_SOURCE_DIR}/mm/assets/extractor/" DESTINATION ./asset
+ install(DIRECTORY "${CMAKE_SOURCE_DIR}/mm/assets/xml/" DESTINATION ./assets/xml COMPONENT 2s2h)
+ endif()
+ 
++if(NOT CMAKE_SYSTEM_NAME STREQUAL "PS5")
+ find_package(Python3 COMPONENTS Interpreter)
+ 
+ # Target to generate OTRs
+@@ -239,6 +242,7 @@ add_custom_target(
+     COMMENT "Generating 2ship.o2r..."
+     DEPENDS ZAPD
+ )
++endif() # NOT PS5
+ 
+ if(CMAKE_SYSTEM_NAME MATCHES "Linux")
+ file(COPY ${CMAKE_SOURCE_DIR}/mm/linux/2s2hIcon.png DESTINATION ${CMAKE_CURRENT_BINARY_DIR})
+diff --git a/mm/2s2h/BenPort.cpp b/mm/2s2h/BenPort.cpp
+index 653de66..19f16ca 100644
+--- a/mm/2s2h/BenPort.cpp
++++ b/mm/2s2h/BenPort.cpp
+@@ -1,3 +1,6 @@
++#ifdef __PROSPERO__
++#include "PS5FramePacer.h"
++#endif
+ #include "BenPort.h"
+ #include <iostream>
+ #include <algorithm>
+@@ -312,7 +315,12 @@ void OTRGlobals::RunExtract(int argc, char* argv[]) {
+     OSFatal();
+ #endif
+ 
++#ifdef __PROSPERO__
++    // The PS5 install path is already the assets folder holding the shipped .o2r files.
++    if (!std::filesystem::exists(installPath)) {
++#else
+     if (!std::filesystem::exists(installPath + "/assets")) {
++#endif
+         BenGui::RegisterPopup("Extractor assets not found",
+                               "No O2R files found. Missing 'assets/' folder needed to generate OTR file.\nPlease "
+                               "re-extract them from the download or.\n\nExiting...",
+@@ -346,7 +354,7 @@ void OTRGlobals::RunExtract(int argc, char* argv[]) {
+                 if (shipArchiveVersionMatch) {
+ #ifdef _WIN32
+                     extractStep = ES_WINDOWS;
+-#elif (defined(__WIIU__) || defined(__SWITCH__))
++#elif (defined(__WIIU__) || defined(__SWITCH__) || defined(__PROSPERO__))
+                     extractStep = ES_VERIFY;
+ #else
+                     extractStep = args.empty() ? ES_EXTRACT : ES_EXTRACT_ARGS;
+@@ -624,6 +632,38 @@ void OTRGlobals::Initialize() {
+ #endif
+     context->InitConfiguration();
+     context->InitConsoleVariables();
++#ifdef __PROSPERO__
++    // Controller-friendly defaults for the PS5 port. Keep explicit preferences.
++    bool defaultsAdded = false;
++    for (const char* name : {"gEnhancements.Saving.PauseSave", "gEnhancements.Mods.AlternateAssets", "gControlNav"}) {
++        if (CVarGetInteger(name, -1) == -1) {
++            CVarSetInteger(name, 1);
++            defaultsAdded = true;
++        }
++    }
++    // PS5 widescreen HUD defaults. Keep explicit modes and all custom positions.
++    const struct { const char* name; int mode; } hudDefaults[] = {
++        {"gHudEditor.A.Mode", 4}, {"gHudEditor.B.Mode", 4},
++        {"gHudEditor.CLeft.Mode", 4}, {"gHudEditor.CDown.Mode", 4},
++        {"gHudEditor.CRight.Mode", 4}, {"gHudEditor.CUp.Mode", 4},
++        {"gHudEditor.DPad.Mode", 4}, {"gHudEditor.Minimap.Mode", 4},
++        {"gHudEditor.Start.Mode", 4},
++        {"gHudEditor.Hearts.Mode", 3}, {"gHudEditor.Magic.Mode", 3},
++        {"gHudEditor.Timers.Mode", 3}, {"gHudEditor.Minigames.Mode", 3},
++        {"gHudEditor.Rupees.Mode", 3}, {"gHudEditor.Keys.Mode", 3},
++        {"gHudEditor.Skulltulas.Mode", 3},
++        {"gHudEditor.Carrots.Mode", 2}, {"gHudEditor.Clock.Mode", 2},
++        {"gHudEditor.SkullKidTimer.Mode", 2},
++    };
++    for (const auto& entry : hudDefaults) {
++        if (CVarGetInteger(entry.name, -1) == -1) {
++            CVarSetInteger(entry.name, entry.mode);
++            defaultsAdded = true;
++        }
++    }
++    if (defaultsAdded) context->GetConsoleVariables()->Save();
++#endif
++
+     auto logLevel = static_cast<spdlog::level::level_enum>(CVarGetInteger("gDeveloperTools.LogLevel", defaultLogLevel));
+     context->InitLogging(logLevel, logLevel);
+     Ship::Context::GetRawInstance()->GetLogger()->set_pattern("[%H:%M:%S.%e] [%s:%#] [%^%l%$] %v");
+@@ -785,14 +825,19 @@ ImFont* OTRGlobals::CreateDefaultFontWithSize(float size) {
+ }
+ 
+ uint32_t OTRGlobals::GetInterpolationFPS() {
++#ifdef __PROSPERO__
++    constexpr int defaultInterpolationFPS = 60;
++#else
++    constexpr int defaultInterpolationFPS = 20;
++#endif
+     if (CVarGetInteger("gMatchRefreshRate", 0)) {
+         return Ship::Context::GetRawInstance()->GetWindow()->GetCurrentRefreshRate();
+     } else if (CVarGetInteger(CVAR_VSYNC_ENABLED, 1) ||
+                !Ship::Context::GetRawInstance()->GetWindow()->CanDisableVerticalSync()) {
+         return std::min<uint32_t>(Ship::Context::GetRawInstance()->GetWindow()->GetCurrentRefreshRate(),
+-                                  CVarGetInteger("gInterpolationFPS", 20));
++                                  CVarGetInteger("gInterpolationFPS", defaultInterpolationFPS));
+     }
+-    return CVarGetInteger("gInterpolationFPS", 20);
++    return CVarGetInteger("gInterpolationFPS", defaultInterpolationFPS);
+ }
+ 
+ extern "C" void OTRMessage_Init();
+@@ -1186,8 +1231,32 @@ void RunCommands(Gfx* Commands, int time, int step, int denom, int count) {
+     UIWidgets::Colors themeColor =
+         static_cast<UIWidgets::Colors>(CVarGetInteger("gSettings.Menu.Theme", UIWidgets::Colors::LightBlue));
+     ImGui::PushStyleColor(ImGuiCol_TitleBgActive, UIWidgets::ColorValues.at(themeColor));
++#ifdef __PROSPERO__
++    static PS5FramePacer pacer;
++    const auto now = []() {
++        return std::chrono::duration<double>(std::chrono::steady_clock::now().time_since_epoch()).count();
++    };
++    const int targetFps = OTRGlobals::Instance->GetInterpolationFPS();
++    const bool paced = targetFps > 60 / R_UPDATE_RATE && !GfxDebuggerIsDebugging();
++    if (paced) {
++        pacer.BeginTick(now(), R_UPDATE_RATE, targetFps);
++    } else {
++        pacer.Reset();
++    }
++    bool rendered = false;
++#endif
+     for (int i = 0; i < count; i++) {
+         time += step;
++#ifdef __PROSPERO__
++        // Drop expired pictures, never game/audio updates. Keep the original
++        // interpolation index for display-list commands that select a subframe.
++        // At least one draw per tick also refreshes depth and GUI state under load.
++        if (paced && !pacer.ShouldRender(now(), (float)time / denom) && (rendered || i + 1 < count)) {
++            intp->mInterpolationIndex++;
++            continue;
++        }
++        rendered = true;
++#endif
+         std::unordered_map<Mtx*, MtxF> mtx_replacements =
+             (time == denom) ? std::unordered_map<Mtx*, MtxF>() : FrameInterpolation_Interpolate((float)time / denom);
+         intp->mInterpolationT = (float)time / denom;
+diff --git a/mm/2s2h/Enhancements/FrameInterpolation/FrameInterpolation.cpp b/mm/2s2h/Enhancements/FrameInterpolation/FrameInterpolation.cpp
+index 7bbf2d3..4b8857f 100644
+--- a/mm/2s2h/Enhancements/FrameInterpolation/FrameInterpolation.cpp
++++ b/mm/2s2h/Enhancements/FrameInterpolation/FrameInterpolation.cpp
+@@ -74,6 +74,16 @@ typedef pair<const void*, int> label;
+ union Data {
+     Data() {
+     }
++#ifdef __PROSPERO__
++    // Every member is plain data; PS5 libc++ otherwise treats the copy as deleted.
++    Data(const Data& other) {
++        memcpy((void*)this, &other, sizeof(Data));
++    }
++    Data& operator=(const Data& other) {
++        memcpy((void*)this, &other, sizeof(Data));
++        return *this;
++    }
++#endif
+ 
+     struct {
+         MtxF src;
+diff --git a/mm/2s2h/Enhancements/ModMenu/ModMenu.cpp b/mm/2s2h/Enhancements/ModMenu/ModMenu.cpp
+index 84f18f0..04afe11 100644
+--- a/mm/2s2h/Enhancements/ModMenu/ModMenu.cpp
++++ b/mm/2s2h/Enhancements/ModMenu/ModMenu.cpp
+@@ -1,5 +1,8 @@
+ #include <map>
+ #include <vector>
++#ifdef __PROSPERO__
++#include <fstream>
++#endif
+ 
+ #include <libultraship/classes.h>
+ #include <ship/utils/StringHelper.h>
+@@ -125,6 +128,7 @@ bool IsValidExtension(std::string extension) {
+ static bool archivesAdded = false;
+ 
+ void UpdateModFiles(bool init = false, bool reset = false) {
++  try {
+     if (init || reset) {
+         enabledModFiles.clear();
+         enabledModFiles = GetEnabledModsFromCVar();
+@@ -133,13 +137,59 @@ void UpdateModFiles(bool init = false, bool reset = false) {
+     unsupportedFiles.clear();
+     filePaths.clear();
+     bool changed = false;
++#ifdef __PROSPERO__
++    const std::filesystem::path manifestPath =
++        Ship::Context::LocateFileAcrossAppDirs("mods/mods.txt", appShortName);
++    std::string modsPath = manifestPath.parent_path().generic_string();
++#else
+     std::string modsPath = Ship::Context::LocateFileAcrossAppDirs("mods", appShortName);
++#endif
+     std::map<std::string, std::string> tempMods;
+     if (modsPath.length() > 0 && std::filesystem::exists(modsPath)) {
+         std::vector<std::filesystem::path> enabledFiles;
+         if (std::filesystem::is_directory(modsPath)) {
++#ifdef __PROSPERO__
++            // The sandbox permits opening known files, but denies readdir.
++            // Resolve the manifest itself so an empty data/mods directory does
++            // not hide packs installed in /app0/assets/mods.
++            std::ifstream manifest(manifestPath);
++            std::string line;
++            while (std::getline(manifest, line)) {
++                if (line.compare(0, 3, "\xEF\xBB\xBF") == 0) {
++                    line.erase(0, 3);
++                }
++                const auto first = line.find_first_not_of(" \t\r");
++                if (first == std::string::npos || line[first] == '#') {
++                    continue;
++                }
++                line = line.substr(first, line.find_last_not_of(" \t\r") - first + 1);
++                const std::filesystem::path relative(line);
++                if (relative.is_absolute() || line.find('\\') != std::string::npos ||
++                    line.find('|') != std::string::npos || line.find('\0') != std::string::npos ||
++                    std::any_of(relative.begin(), relative.end(), [](const auto& part) { return part == ".."; })) {
++                    SPDLOG_WARN("Ignoring invalid mod manifest entry: {}", line);
++                    continue;
++                }
++                const auto path = (manifestPath.parent_path() / relative).lexically_normal();
++                std::error_code error;
++                if (IsValidExtension(path.extension().generic_string()) &&
++                    std::filesystem::is_regular_file(path, error)) {
++                    enabledFiles.push_back(path);
++                } else {
++                    SPDLOG_WARN("Mod archive missing or unsupported: {}", path.generic_string());
++                }
++            }
++            if (manifest.bad()) {
++                SPDLOG_ERROR("Could not read mod manifest: {}", manifestPath.generic_string());
++                enabledModFiles.clear();
++                return;
++            }
++            for (const auto& path : enabledFiles) {
++                const std::filesystem::directory_entry p(path);
++#else
+             for (const std::filesystem::directory_entry& p : std::filesystem::recursive_directory_iterator(
+                      modsPath, std::filesystem::directory_options::follow_directory_symlink)) {
++#endif
+                 if (p.is_directory()) {
+                     continue;
+                 }
+@@ -149,6 +199,10 @@ void UpdateModFiles(bool init = false, bool reset = false) {
+                 if (!IsValidExtension(extension)) {
+                     continue;
+                 }
++                if (filePaths.contains(filename)) {
++                    SPDLOG_WARN("Ignoring duplicate mod name: {}", p.path().generic_string());
++                    continue;
++                }
+                 bool enabled =
+                     std::find(enabledModFiles.begin(), enabledModFiles.end(), filename) != enabledModFiles.end();
+                 if (!enabled) {
+@@ -180,6 +234,13 @@ void UpdateModFiles(bool init = false, bool reset = false) {
+             SetEnabledModsCVarValue();
+         }
+     }
++  } catch (const std::filesystem::filesystem_error&) {
++        // PS5 (/app0*) and other sandboxes deny directory listing; skip mods gracefully.
++  }
++#ifdef __PROSPERO__
++    // A removed pack must not leave a menu entry whose filePaths.at() throws.
++    std::erase_if(enabledModFiles, [](const auto& name) { return !filePaths.contains(name); });
++#endif
+ }
+ 
+ extern "C" void gfx_texture_cache_clear();
+diff --git a/mm/2s2h/Enhancements/Saving/PauseSaveLabel.h b/mm/2s2h/Enhancements/Saving/PauseSaveLabel.h
+new file mode 100644
+index 0000000..ac12105
+--- /dev/null
++++ b/mm/2s2h/Enhancements/Saving/PauseSaveLabel.h
+@@ -0,0 +1,11 @@
++#pragma once
++#include "2s2h/BenPort.h"
++
++// Optional user-supplied OOT Save label. Resolve through the resource manager
++// so alternate HD textures retain their dimensions, scaling and filtering.
++static const char sPauseSaveLabelPath[] __attribute__((aligned(2))) =
++    "__OTR__do_action_static/gDoActionSaveENGTex";
++
++static const void* PauseSave_GetLabel(const void* fallback) {
++    return ResourceMgr_FileExists("do_action_static/gDoActionSaveENGTex") ? sPauseSaveLabelPath : fallback;
++}
+diff --git a/mm/2s2h/PS5FramePacer.h b/mm/2s2h/PS5FramePacer.h
+new file mode 100644
+index 0000000..29570fa
+--- /dev/null
++++ b/mm/2s2h/PS5FramePacer.h
+@@ -0,0 +1,33 @@
++#pragma once
++
++// Deadlines are in monotonic seconds. A game tick advances the timeline once,
++// regardless of how many of its interpolated pictures the renderer can finish.
++class PS5FramePacer {
++  public:
++    void BeginTick(double now, int updateRate, int targetFps) {
++        const double duration = updateRate / 60.0;
++        if (updateRate != mUpdateRate || targetFps != mTargetFps || now - mDeadline > 0.25 ||
++            now < mDeadline - duration) {
++            mDeadline = now;
++        }
++        mStart = mDeadline;
++        mDeadline += duration;
++        mUpdateRate = updateRate;
++        mTargetFps = targetFps;
++    }
++
++    bool ShouldRender(double now, float phase) const {
++        return now < mStart + (mDeadline - mStart) * phase;
++    }
++
++    void Reset() {
++        mUpdateRate = 0;
++        mTargetFps = 0;
++    }
++
++  private:
++    double mStart = 0.0;
++    double mDeadline = 0.0;
++    int mUpdateRate = 0;
++    int mTargetFps = 0;
++};
+diff --git a/mm/2s2h/PresetManager/PresetManager.cpp b/mm/2s2h/PresetManager/PresetManager.cpp
+index 9121944..ee4909e 100644
+--- a/mm/2s2h/PresetManager/PresetManager.cpp
++++ b/mm/2s2h/PresetManager/PresetManager.cpp
+@@ -657,7 +657,10 @@ nlohmann::json voyage3PresetJ = R"(
+ )"_json;
+ 
+ std::unordered_map<std::string, std::pair<nlohmann::json, std::set<std::string>>> presets = {};
+-const std::filesystem::path presetsFolderPath(Ship::Context::GetPathRelativeToAppDirectory("presets", appShortName));
++static const std::filesystem::path& GetPresetsFolderPath() {
++    static const std::filesystem::path path(Ship::Context::GetPathRelativeToAppDirectory("presets", appShortName));
++    return path;
++}
+ 
+ void PresetManager_RefreshPresets() {
+     presets.clear();
+@@ -667,12 +670,13 @@ void PresetManager_RefreshPresets() {
+     presets.insert({ "Voyage 3", { voyage3PresetJ, { "Developer Tools", "Enhancements", "Rando" } } });
+ 
+     // ensure the presets folder exists
+-    if (!std::filesystem::exists(presetsFolderPath)) {
+-        std::filesystem::create_directory(presetsFolderPath);
++    if (!std::filesystem::exists(GetPresetsFolderPath())) {
++        std::filesystem::create_directory(GetPresetsFolderPath());
+     }
+ 
+     // Add all files in the presets folder to the list of presets
+-    for (const auto& entry : std::filesystem::directory_iterator(presetsFolderPath)) {
++    try {
++    for (const auto& entry : std::filesystem::directory_iterator(GetPresetsFolderPath())) {
+         if (entry.is_regular_file()) {
+             std::string fileName = entry.path().filename().string();
+             fileName.erase(fileName.find_last_of('.'));
+@@ -712,6 +716,9 @@ void PresetManager_RefreshPresets() {
+             } catch (...) {}
+         }
+     }
++    } catch (const std::filesystem::filesystem_error&) {
++        // Sandbox denies directory listing; keep the built-in presets.
++    }
+ }
+ 
+ static void EnsureConfigPathExists(const std::string& key) {
+@@ -806,7 +813,7 @@ void PresetManager_CreatePreset(std::string presetName) {
+         newJson["CVars"].erase("gWindows");
+ 
+         std::string presetFileName = presetName + ".json";
+-        const std::filesystem::path newPresetFilePath = presetsFolderPath / presetFileName;
++        const std::filesystem::path newPresetFilePath = GetPresetsFolderPath() / presetFileName;
+         std::ofstream newFileStream(newPresetFilePath);
+         newFileStream << newJson.dump(4);
+ 
+@@ -869,7 +876,7 @@ bool PresetManager_HandleFileDropped(char* filePath) {
+ 
+         // Save the spoiler file to the presets folder
+         std::string presetFileName = std::filesystem::path(filePath).filename().string();
+-        const std::filesystem::path newPresetFilePath = presetsFolderPath / presetFileName;
++        const std::filesystem::path newPresetFilePath = GetPresetsFolderPath() / presetFileName;
+         std::filesystem::copy_file(filePath, newPresetFilePath, std::filesystem::copy_options::overwrite_existing);
+ 
+         PresetManager_RefreshPresets();
+@@ -888,7 +895,7 @@ void PresetManager_Draw() {
+                        "refresh the list.");
+     ImGui::PopStyleColor();
+     if (UIWidgets::Button("Open Presets Folder", { .size = ImVec2(ImGui::GetContentRegionAvail().x - 42, 0) })) {
+-        std::string path = "file:///" + std::filesystem::absolute(presetsFolderPath).string();
++        std::string path = "file:///" + std::filesystem::absolute(GetPresetsFolderPath()).string();
+         SDL_OpenURL(path.c_str());
+     }
+     ImGui::SameLine();
+diff --git a/mm/2s2h/Rando/Spoiler/RefreshOptions.cpp b/mm/2s2h/Rando/Spoiler/RefreshOptions.cpp
+index 4c14f01..7cd4785 100644
+--- a/mm/2s2h/Rando/Spoiler/RefreshOptions.cpp
++++ b/mm/2s2h/Rando/Spoiler/RefreshOptions.cpp
+@@ -6,8 +6,11 @@
+ #include <libultraship/libultra/types.h>
+ 
+ std::vector<std::string> Rando::Spoiler::spoilerOptions;
+-const std::filesystem::path randomizerFolderPath(Ship::Context::GetPathRelativeToAppDirectory("randomizer",
++static const std::filesystem::path& GetRandomizerFolderPath() {
++    static const std::filesystem::path path(Ship::Context::GetPathRelativeToAppDirectory("randomizer",
+                                                                                               appShortName));
++    return path;
++}
+ 
+ void Rando::Spoiler::SelectSpoiler(s32 index) {
+     bool generateNew = (index <= 0) || (index >= (s32)Rando::Spoiler::spoilerOptions.size());
+@@ -25,12 +28,13 @@ void Rando::Spoiler::RefreshOptions() {
+     s32 spoilerFileIndex = -1;
+ 
+     // ensure the randomizer folder exists
+-    if (!std::filesystem::exists(randomizerFolderPath)) {
+-        std::filesystem::create_directory(randomizerFolderPath);
++    if (!std::filesystem::exists(GetRandomizerFolderPath())) {
++        std::filesystem::create_directory(GetRandomizerFolderPath());
+     }
+ 
+     // Add all files in the randomizer folder to the list of spoiler options
+-    for (const auto& entry : std::filesystem::directory_iterator(randomizerFolderPath)) {
++    try {
++    for (const auto& entry : std::filesystem::directory_iterator(GetRandomizerFolderPath())) {
+         if (entry.is_regular_file()) {
+             std::string fileName = entry.path().filename().string();
+             Rando::Spoiler::spoilerOptions.push_back(fileName);
+@@ -41,6 +45,9 @@ void Rando::Spoiler::RefreshOptions() {
+             }
+         }
+     }
++    } catch (const std::filesystem::filesystem_error&) {
++        // Sandbox denies directory listing; no spoiler files are offered.
++    }
+ 
+     // If the current spoiler file is not in the randomizer folder, reset the cvar
+     if (spoilerFileIndex == -1) {
+diff --git a/mm/2s2h/SaveManager/SaveManager.cpp b/mm/2s2h/SaveManager/SaveManager.cpp
+index 5331400..271c7f6 100644
+--- a/mm/2s2h/SaveManager/SaveManager.cpp
++++ b/mm/2s2h/SaveManager/SaveManager.cpp
+@@ -30,7 +30,10 @@ extern FileSelectState* gFileSelectState;
+     ((GET_NEWF(save, 0) == 'Z') && (GET_NEWF(save, 1) == 'E') && (GET_NEWF(save, 2) == 'L') && \
+      (GET_NEWF(save, 3) == 'D') && (GET_NEWF(save, 4) == 'A') && (GET_NEWF(save, 5) == '3'))
+ 
+-const std::filesystem::path savesFolderPath(Ship::Context::GetPathRelativeToAppDirectory("saves", appShortName));
++static const std::filesystem::path& GetSavesFolderPath() {
++    static const std::filesystem::path path(Ship::Context::GetPathRelativeToAppDirectory("saves", appShortName));
++    return path;
++}
+ 
+ // Migrations
+ // The idea here is that we can read in any version of the save as generic JSON, then apply migrations
+@@ -107,10 +110,10 @@ int SaveManager_MigrateSave(nlohmann::json& j) {
+ }
+ 
+ void SaveManager_WriteSaveFile(const std::filesystem::path& fileName, nlohmann::json j) {
+-    const std::filesystem::path filePath = savesFolderPath / fileName;
++    const std::filesystem::path filePath = GetSavesFolderPath() / fileName;
+ 
+-    if (!std::filesystem::exists(savesFolderPath)) {
+-        std::filesystem::create_directory(savesFolderPath);
++    if (!std::filesystem::exists(GetSavesFolderPath())) {
++        std::filesystem::create_directory(GetSavesFolderPath());
+     }
+ 
+     try {
+@@ -121,7 +124,7 @@ void SaveManager_WriteSaveFile(const std::filesystem::path& fileName, nlohmann::
+ }
+ 
+ void SaveManager_DeleteSaveFile(const std::filesystem::path& fileName) {
+-    const std::filesystem::path filePath = savesFolderPath / fileName;
++    const std::filesystem::path filePath = GetSavesFolderPath() / fileName;
+ 
+     try {
+         if (std::filesystem::exists(filePath)) {
+@@ -131,7 +134,7 @@ void SaveManager_DeleteSaveFile(const std::filesystem::path& fileName) {
+ }
+ 
+ int SaveManager_ReadSaveFile(const std::filesystem::path& fileName, nlohmann::json& j) {
+-    const std::filesystem::path filePath = savesFolderPath / fileName;
++    const std::filesystem::path filePath = GetSavesFolderPath() / fileName;
+ 
+     if (!std::filesystem::exists(filePath)) {
+         return -1;
+@@ -177,9 +180,9 @@ void SaveManager_PersistSariaHintsAvailable() {
+ }
+ 
+ void SaveManager_MoveInvalidSaveFile(const std::filesystem::path& fileName, const std::string& message) {
+-    const std::filesystem::path filePath = savesFolderPath / fileName;
++    const std::filesystem::path filePath = GetSavesFolderPath() / fileName;
+     const std::filesystem::path backupFilePath =
+-        savesFolderPath / (fileName.stem().string() + "_invalid_" + std::to_string(std::time(nullptr)) + ".json");
++        GetSavesFolderPath() / (fileName.stem().string() + "_invalid_" + std::to_string(std::time(nullptr)) + ".json");
+ 
+     try {
+         if (std::filesystem::exists(filePath)) {
+@@ -193,17 +196,17 @@ void SaveManager_MoveInvalidSaveFile(const std::filesystem::path& fileName, cons
+ 
+ int SaveManager_GetOpenFileSlot() {
+     std::string fileName = "file1.json";
+-    if (!std::filesystem::exists(savesFolderPath / fileName)) {
++    if (!std::filesystem::exists(GetSavesFolderPath() / fileName)) {
+         return 1;
+     }
+ 
+     fileName = "file2.json";
+-    if (!std::filesystem::exists(savesFolderPath / fileName)) {
++    if (!std::filesystem::exists(GetSavesFolderPath() / fileName)) {
+         return 2;
+     }
+ 
+     fileName = "file3.json";
+-    if (!std::filesystem::exists(savesFolderPath / fileName)) {
++    if (!std::filesystem::exists(GetSavesFolderPath() / fileName)) {
+         return 3;
+     }
+ 
+diff --git a/mm/2s2h/mixer.c b/mm/2s2h/mixer.c
+index 6364fa5..bcca182 100644
+--- a/mm/2s2h/mixer.c
++++ b/mm/2s2h/mixer.c
+@@ -181,7 +181,42 @@ void aSetLoopImpl(ADPCM_STATE* adpcm_loop_state) {
+     rspa.adpcm_loop_state = adpcm_loop_state;
+ }
+ 
++
++#ifdef __PROSPERO__
++#include <stdlib.h>
++extern const void* Ps5AudioScriptQueue(void);
++static long ps5_adpcm_context_values[8];
++void Ps5AdpcmContext(long size, long pos, long end, long start, long frames, long samples, long offset, long codec) {
++    long values[8] = {size, pos, end, start, frames, samples, offset, codec};
++    memcpy(ps5_adpcm_context_values, values, sizeof(values));
++}
++static void Ps5AdpcmFailure(const char* reason, unsigned flags, const void* state) {
++    FILE* f = fopen("/download0/mm-adpcm-range.txt", "w");
++    if (f) {
++        fprintf(f, "reason=%s flags=%u in=%u out=%u count=%u state=%p loop=%p buffer=%p queue=%p\n",
++                reason, flags, rspa.in, rspa.out, rspa.nbytes, state, rspa.adpcm_loop_state,
++                rspa.buf.as_u8, Ps5AudioScriptQueue());
++        fprintf(f, "size=%ld pos=%ld end=%ld loopstart=%ld frames=%ld samples=%ld offset=%ld codec=%ld\n",
++                ps5_adpcm_context_values[0], ps5_adpcm_context_values[1], ps5_adpcm_context_values[2],
++                ps5_adpcm_context_values[3], ps5_adpcm_context_values[4], ps5_adpcm_context_values[5],
++                ps5_adpcm_context_values[6], ps5_adpcm_context_values[7]);
++        fclose(f);
++    }
++    abort();
++}
++#endif
++
+ void aADPCMdecImpl(uint8_t flags, ADPCM_STATE state) {
++#ifdef __PROSPERO__
++    unsigned char queue_before[40];
++    memcpy(queue_before, Ps5AudioScriptQueue(), sizeof(queue_before));
++    unsigned decoded = ROUND_UP_32(rspa.nbytes);
++    unsigned encoded = (decoded / 32) * ((flags & 4) ? 5 : 9);
++    if (rspa.out < 0x330 || (unsigned)rspa.out + 32 + decoded > 0x330 + DMEM_BUF_SIZE ||
++        rspa.in < 0x330 || (unsigned)rspa.in + encoded > 0x330 + DMEM_BUF_SIZE) {
++        Ps5AdpcmFailure("buffer range", flags, state);
++    }
++#endif
+     uint8_t* in = BUF_U8(rspa.in);
+     int16_t* out = BUF_S16(rspa.out);
+     int nbytes = ROUND_UP_32(rspa.nbytes);
+@@ -197,6 +232,9 @@ void aADPCMdecImpl(uint8_t flags, ADPCM_STATE state) {
+     while (nbytes > 0) {
+         int shift = *in >> 4;          // should be in 0..12 or 0..14
+         int table_index = *in++ & 0xf; // should be in 0..7
++#ifdef __PROSPERO__
++        if (table_index >= 8) Ps5AdpcmFailure("predictor index", flags, state);
++#endif
+         int16_t(*tbl)[8] = rspa.adpcm_table[table_index];
+         int i;
+ 
+@@ -230,6 +268,10 @@ void aADPCMdecImpl(uint8_t flags, ADPCM_STATE state) {
+         nbytes -= 16 * sizeof(int16_t);
+     }
+     memcpy(state, out - 16, 16 * sizeof(int16_t));
++#ifdef __PROSPERO__
++    if (memcmp(queue_before, Ps5AudioScriptQueue(), sizeof(queue_before)))
++        Ps5AdpcmFailure("queue changed", flags, state);
++#endif
+ }
+ 
+ void aResampleImpl(uint8_t flags, uint16_t pitch, RESAMPLE_STATE state) {
+diff --git a/mm/2s2h/resource/importer/AudioSampleFactory.cpp b/mm/2s2h/resource/importer/AudioSampleFactory.cpp
+index 8948a67..dd3fee7 100644
+--- a/mm/2s2h/resource/importer/AudioSampleFactory.cpp
++++ b/mm/2s2h/resource/importer/AudioSampleFactory.cpp
+@@ -215,6 +215,8 @@ ResourceFactoryBinaryAudioSampleV2::ReadResource(std::shared_ptr<Ship::File> fil
+     audioSample->loop.start = reader->ReadUInt32();
+     audioSample->loop.end = reader->ReadUInt32();
+     audioSample->loop.count = reader->ReadUInt32();
++    // Legacy resources omit the tail endpoint; use the valid loop end.
++    audioSample->loop.sampleEnd = audioSample->loop.end;
+ 
+     // This always seems to be 16. Can it be removed in V3?
+     uint32_t loopStateCount = reader->ReadUInt32();
+@@ -263,6 +265,8 @@ ResourceFactoryXMLAudioSampleV0::ReadResource(std::shared_ptr<Ship::File> file,
+         audioSample->loop.start = loopRoot->UnsignedAttribute("Start");
+         audioSample->loop.end = loopRoot->UnsignedAttribute("End");
+         audioSample->loop.count = loopRoot->UnsignedAttribute("Count");
++        // Legacy resources omit the tail endpoint; use the valid loop end.
++        audioSample->loop.sampleEnd = audioSample->loop.end;
+         tinyxml2::XMLElement* predictor = loopRoot->FirstChildElement("Predictor");
+         while (predictor != nullptr) {
+             audioSample->loop.state[i++] = predictor->IntAttribute("State");
+diff --git a/mm/2s2h/resource/type/AudioSample.h b/mm/2s2h/resource/type/AudioSample.h
+index a3b24f7..7940d91 100644
+--- a/mm/2s2h/resource/type/AudioSample.h
++++ b/mm/2s2h/resource/type/AudioSample.h
+@@ -9,7 +9,7 @@ typedef struct {
+     /* 0x00 */ u32 start;
+     /* 0x04 */ u32 end;
+     /* 0x08 */ u32 count;
+-    /* 0x0C */ char unk_0C[0x4];
++    /* 0x0C */ u32 sampleEnd; // MM release-tail endpoint; absent from legacy resources
+     /* 0x10 */ s16 state[16]; // only exists if count != 0. 8-byte aligned
+ } AdpcmLoop;                  // size = 0x30 (or 0x10)
+ 
+diff --git a/mm/CMakeLists.txt b/mm/CMakeLists.txt
+index d9f7f09..cb3cc9d 100644
+--- a/mm/CMakeLists.txt
++++ b/mm/CMakeLists.txt
+@@ -68,7 +68,7 @@ if (NOT TARGET libultraship)
+     add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/../libultraship ${CMAKE_BINARY_DIR}/libultraship)
+ endif()
+ 
+-if (NOT TARGET ZAPDLib)
++if (NOT TARGET ZAPDLib AND NOT CMAKE_SYSTEM_NAME STREQUAL "PS5")
+     add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/../ZAPDTR/ZAPD ${CMAKE_BINARY_DIR}/ZAPD)
+ endif()
+ 
+@@ -439,8 +439,8 @@ if (CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang|AppleClang")
+             -Wno-narrowing
+             -Wno-missing-braces
+             $<$<COMPILE_LANGUAGE:C>:
+-                -Wno-discarded-qualifiers
+-                -Wno-discarded-array-qualifiers
++                $<$<C_COMPILER_ID:GNU>:-Wno-discarded-qualifiers>
++                $<$<C_COMPILER_ID:GNU>:-Wno-discarded-array-qualifiers>
+                 -Wno-int-conversion
+                 #-Werror-implicit-function-declaration
+                 -Wno-incompatible-pointer-types
+@@ -518,7 +518,7 @@ endif()
+ if (CMAKE_GENERATOR MATCHES "Visual Studio")
+     set(VS_COPY_ASSETS_CMD ${CMAKE_COMMAND} -E copy_directory_if_different $<TARGET_FILE_DIR:2ship>/assets ${CMAKE_BINARY_DIR}/mm/assets)
+ endif()
+-if(NOT CMAKE_SYSTEM_NAME MATCHES "NintendoSwitch|CafeOS")
++if(NOT CMAKE_SYSTEM_NAME MATCHES "NintendoSwitch|CafeOS|PS5")
+     add_custom_command(
+         TARGET ${PROJECT_NAME}
+         POST_BUILD
+@@ -535,7 +535,7 @@ endif()
+ add_dependencies(${PROJECT_NAME}
+     libultraship
+ )
+-if(NOT CMAKE_SYSTEM_NAME MATCHES "NintendoSwitch|CafeOS")
++if(NOT CMAKE_SYSTEM_NAME MATCHES "NintendoSwitch|CafeOS|PS5")
+ add_dependencies(${PROJECT_NAME}
+     ZAPDLib
+ )
+@@ -556,7 +556,7 @@ if (CMAKE_SYSTEM_NAME STREQUAL "Windows")
+ 
+ 	set(ADDITIONAL_LIBRARY_DEPENDENCIES
+ 		"libultraship;"
+-		"ZAPDLib;"
++		$<$<NOT:$<STREQUAL:${CMAKE_SYSTEM_NAME},PS5>>:ZAPDLib>
+ 		"glu32;"
+ 		"SDL2::SDL2;"
+ 		"SDL2::SDL2main;"
+@@ -605,7 +605,7 @@ else()
+     find_package(OpusFile REQUIRED)
+     set(ADDITIONAL_LIBRARY_DEPENDENCIES
+         "libultraship;"
+-		"ZAPDLib;"
++		$<$<NOT:$<STREQUAL:${CMAKE_SYSTEM_NAME},PS5>>:ZAPDLib>
+         "Ogg::ogg"
+         "Vorbis::vorbis"
+         "Vorbis::vorbisenc"
+@@ -618,9 +618,14 @@ else()
+ 		Threads::Threads
+ 	)
+ 
++    if(CMAKE_SYSTEM_NAME STREQUAL "PS5")
++        # ColorPictograph.cpp includes <png.h>; the PS5 prefix ships a static libpng.
++        find_package(PNG REQUIRED)
++        list(APPEND ADDITIONAL_LIBRARY_DEPENDENCIES "PNG::PNG")
++    endif()
+ endif()
+ 
+-if(NOT CMAKE_SYSTEM_NAME MATCHES "Darwin|NintendoSwitch|CafeOS")
++if(NOT CMAKE_SYSTEM_NAME MATCHES "Darwin|NintendoSwitch|CafeOS|PS5")
+ INSTALL(TARGETS 2ship DESTINATION . COMPONENT 2s2h)
+ endif()
+ 
+@@ -637,11 +642,11 @@ configure_file( ${CMAKE_CURRENT_SOURCE_DIR}/macosx/Info.plist.in ${CMAKE_BINARY_
+ INSTALL(TARGETS 2ship DESTINATION ../MacOS COMPONENT 2s2h)
+ INSTALL(FILES ${CMAKE_BINARY_DIR}/gamecontrollerdb.txt DESTINATION ../MacOS COMPONENT 2s2h)
+ INSTALL(FILES ${CMAKE_BINARY_DIR}/mm/2ship.o2r DESTINATION ../Resources COMPONENT 2s2h)
+-elseif(NOT "${CMAKE_SYSTEM_NAME}" MATCHES "NintendoSwitch|CafeOS")
++elseif(NOT "${CMAKE_SYSTEM_NAME}" MATCHES "NintendoSwitch|CafeOS|PS5")
+ INSTALL(FILES ${CMAKE_BINARY_DIR}/gamecontrollerdb.txt DESTINATION . COMPONENT 2s2h)
+ endif()
+ 
+-if(CMAKE_SYSTEM_NAME MATCHES "NintendoSwitch|CafeOS")
++if(CMAKE_SYSTEM_NAME MATCHES "NintendoSwitch|CafeOS|PS5")
+     if (NOT TARGET pathconf)
+         add_library(pathconf OBJECT platform/pathconf.c)
+     endif()
+diff --git a/mm/platform/pathconf.c b/mm/platform/pathconf.c
+new file mode 100644
+index 0000000..a52d313
+--- /dev/null
++++ b/mm/platform/pathconf.c
+@@ -0,0 +1,5 @@
++#include <unistd.h>
++
++long pathconf(const char* path, int name) {
++    return -1;
++}
+\ No newline at end of file
+diff --git a/mm/src/audio/lib/load.c b/mm/src/audio/lib/load.c
+index 6e3b1b9..3ff4945 100644
+--- a/mm/src/audio/lib/load.c
++++ b/mm/src/audio/lib/load.c
+@@ -1932,6 +1932,7 @@ s32 AudioLoad_ProcessSamplePreloads(s32 resetStatus) {
+     Sample* sample;
+     AudioPreloadReq* preload;
+     u32 preloadIndex;
++    OSMesg preloadMsg;
+     u32 key;
+     u32 nChunks;
+     s32 pad;
+@@ -1939,16 +1940,16 @@ s32 AudioLoad_ProcessSamplePreloads(s32 resetStatus) {
+     if (gAudioCtx.preloadSampleStackTop > 0) {
+         if (resetStatus != 0) {
+             // Clear result queue and preload stack and return.
+-            osRecvMesg(&gAudioCtx.preloadSampleQueue, (OSMesg*)&preloadIndex, OS_MESG_NOBLOCK);
++            osRecvMesg(&gAudioCtx.preloadSampleQueue, NULL, OS_MESG_NOBLOCK);
+             gAudioCtx.preloadSampleStackTop = 0;
+             return false;
+         }
+-        if (osRecvMesg(&gAudioCtx.preloadSampleQueue, (OSMesg*)&preloadIndex, OS_MESG_NOBLOCK) == -1) {
++        if (osRecvMesg(&gAudioCtx.preloadSampleQueue, &preloadMsg, OS_MESG_NOBLOCK) == -1) {
+             // Previous preload is not done yet.
+             return false;
+         }
+ 
+-        preloadIndex >>= 24;
++        preloadIndex = preloadMsg.data32 >> 24;
+         preload = &gAudioCtx.preloadSampleStack[preloadIndex];
+ 
+         if (preload->isFree == false) {
+@@ -2247,11 +2248,11 @@ void AudioLoad_ScriptLoad(s32 tableType, s32 id, s8* isDone) {
+ 
+ void AudioLoad_ProcessScriptLoads(void) {
+     u32 temp;
+-    u32 sp20;
++    OSMesg sp20;
+     s8* isDone;
+ 
+-    if (osRecvMesg(&sScriptLoadQueue, (OSMesg*)&sp20, OS_MESG_NOBLOCK) != -1) {
+-        temp = sp20 >> 24;
++    if (osRecvMesg(&sScriptLoadQueue, &sp20, OS_MESG_NOBLOCK) != -1) {
++        temp = sp20.data32 >> 24;
+         isDone = sScriptLoadDonePointers[temp];
+         if (isDone != NULL) {
+             *isDone = false;
+@@ -2262,3 +2263,7 @@ void AudioLoad_ProcessScriptLoads(void) {
+ void AudioLoad_InitScriptLoads(void) {
+     osCreateMesgQueue(&sScriptLoadQueue, sScriptLoadMesgBuf, ARRAY_COUNT(sScriptLoadMesgBuf));
+ }
++
++#ifdef __PROSPERO__
++const void* Ps5AudioScriptQueue(void) { return &sScriptLoadQueue; }
++#endif
+diff --git a/mm/src/audio/lib/playback.c b/mm/src/audio/lib/playback.c
+index a349540..d4b2b50 100644
+--- a/mm/src/audio/lib/playback.c
++++ b/mm/src/audio/lib/playback.c
+@@ -196,7 +196,9 @@ void AudioPlayback_ProcessNotes(void) {
+         sampleState = &gAudioCtx.sampleStateList[gAudioCtx.sampleStateOffset + i];
+         playbackState = &note->playbackState;
+         if (playbackState->parentLayer != NO_LAYER) {
+-#ifndef __WIIU__
++#if !defined(__WIIU__) && !defined(__PROSPERO__)
++            // PS5 sequence layers live in static gAudioCtx below 2 GiB. They are
++            // valid native pointers, so the N64 address cutoff must not apply.
+             // OTRTODO: This skips playback if the pointer is below where memory on the N64 normally would be.
+             // This does not translate well to modern platforms and how they map memory.
+             // Considering that this check is not present in OoT/SoH, we may be able to remove this altogether.
+diff --git a/mm/src/audio/lib/synthesis.c b/mm/src/audio/lib/synthesis.c
+index c78a043..47eb0ed 100644
+--- a/mm/src/audio/lib/synthesis.c
++++ b/mm/src/audio/lib/synthesis.c
+@@ -1,3 +1,6 @@
++#ifdef __PROSPERO__
++extern void Ps5AdpcmContext(long, long, long, long, long, long, long, long);
++#endif
+ #include "global.h"
+ #include <libultraship/bridge/resourcebridge.h>
+ #include "2s2h/mixer.h"
+@@ -1049,6 +1052,12 @@ Acmd* AudioSynth_ProcessSample(s32 noteIndex, NoteSampleState* sampleState, Note
+ 
+                 numFirstFrameSamplesToIgnore = synthState->samplePosInt & 0xF;
+                 numSamplesUntilEnd = sampleEndPos - synthState->samplePosInt;
++                // A reused note can retain a cursor beyond this sample's end.
++                // Process that as an exhausted sample, never a negative chunk.
++                // See upstream audio portability PR #1745.
++                if (numSamplesUntilEnd < 0) {
++                    numSamplesUntilEnd = 0;
++                }
+ 
+                 // Calculate number of samples to process this loop
+                 numSamplesToProcess = numSamplesToLoadAdj - numSamplesProcessed;
+@@ -1247,6 +1256,10 @@ Acmd* AudioSynth_ProcessSample(s32 noteIndex, NoteSampleState* sampleState, Note
+                     dmemUncompressedAddrOffset2 = ALIGN16(dmemUncompressedAddrOffset1 + 8 * SAMPLE_SIZE);
+                 }
+ 
++#ifdef __PROSPERO__
++                Ps5AdpcmContext(sample->size, synthState->samplePosInt, sampleEndPos, loopInfo->start,
++                                numFramesToDecode, numSamplesToDecode, dmemUncompressedAddrOffset2, sample->codec);
++#endif
+                 // Decompress the raw sample chunks in the rsp
+                 // Goes from adpcm (compressed) sample data to pcm (uncompressed) sample data
+                 switch (sample->codec) {
+diff --git a/mm/src/audio/lib/thread.c b/mm/src/audio/lib/thread.c
+index 4128ffc..117fe74 100644
+--- a/mm/src/audio/lib/thread.c
++++ b/mm/src/audio/lib/thread.c
+@@ -486,15 +486,15 @@ void AudioThread_ProcessCmds(u32 msg) {
+ }
+ 
+ u32 AudioThread_GetExternalLoadQueueMsg(u32* retMsg) {
+-    u32 msg;
++    OSMesg msg;
+ 
+-    if (osRecvMesg(&gAudioCtx.externalLoadQueue, (OSMesg*)&msg, OS_MESG_NOBLOCK) == -1) {
++    if (osRecvMesg(&gAudioCtx.externalLoadQueue, &msg, OS_MESG_NOBLOCK) == -1) {
+         *retMsg = 0;
+         return 0;
+     }
+ 
+-    *retMsg = msg & 0xFFFFFF;
+-    return msg >> 0x18;
++    *retMsg = msg.data32 & 0xFFFFFF;
++    return msg.data32 >> 0x18;
+ }
+ 
+ u8* AudioThread_GetFontsForSequence(s32 seqId, u32* outNumFonts, u8* buff) {
+@@ -522,7 +522,7 @@ s32 func_80193C5C(void) {
+ void AudioThread_WaitForAudioResetQueueP(void) {
+     // macro?
+     // clang-format off
+-    s32 chk = -1; s32 msg; do {} while (osRecvMesg(gAudioCtx.audioResetQueueP, (OSMesg*)&msg, OS_MESG_NOBLOCK) != chk);
++    s32 chk = -1; do {} while (osRecvMesg(gAudioCtx.audioResetQueueP, NULL, OS_MESG_NOBLOCK) != chk);
+     // clang-format on
+ }
+ 
+diff --git a/mm/src/code/z_parameter.c b/mm/src/code/z_parameter.c
+index 7c66e0d..9b40c05 100644
+--- a/mm/src/code/z_parameter.c
++++ b/mm/src/code/z_parameter.c
+@@ -1,4 +1,6 @@
+ #include "global.h"
++#include "2s2h/Enhancements/Saving/SavingEnhancements.h"
++#include "2s2h/Enhancements/Saving/PauseSaveLabel.h"
+ #include "PR/gs2dex.h"
+ #include "sys_cfb.h"
+ #include "z64malloc.h"
+@@ -6410,7 +6412,13 @@ void Interface_DrawBButtonIcons(PlayState* play) {
+         //! from the wallet icon) prior to obtaining magic.
+         GameInteractor_Should(VB_SET_BUTTON_ENV_COLOR, false);
+         gDPSetPrimColor(OVERLAY_DISP++, 0, 0, 255, 255, 255, interfaceCtx->bAlpha);
+-        gDPLoadTextureBlock_4b(OVERLAY_DISP++, interfaceCtx->doActionSegment[DO_ACTION_SEG_B].mainTex, G_IM_FMT_IA,
++        // Keep the label in sync with the pause-save action; Start still returns to play.
++        const void* bActionTex = interfaceCtx->doActionSegment[DO_ACTION_SEG_B].mainTex;
++        if (play->pauseCtx.state == PAUSE_STATE_MAIN &&
++            CVarGetInteger("gEnhancements.Saving.PauseSave", 0) && SavingEnhancements_CanSave()) {
++            bActionTex = PauseSave_GetLabel(bActionTex);
++        }
++        gDPLoadTextureBlock_4b(OVERLAY_DISP++, bActionTex, G_IM_FMT_IA,
+                                DO_ACTION_TEX_WIDTH, DO_ACTION_TEX_HEIGHT, 0, G_TX_NOMIRROR | G_TX_WRAP,
+                                G_TX_NOMIRROR | G_TX_WRAP, G_TX_NOMASK, G_TX_NOMASK, G_TX_NOLOD, G_TX_NOLOD);
+ 

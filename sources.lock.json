@@ -1,0 +1,73 @@
+{
+  "2ship2harkinian": {
+    "url": "https://github.com/HarbourMasters/2ship2harkinian.git",
+    "tag": "5.0.1",
+    "revision": "8a24047fbce8915993804e7819f4df4fa591551f"
+  },
+  "libultraship": {
+    "url": "https://github.com/kenix3/libultraship.git",
+    "revision": "7cb10226e7875ec48ceec2f841d00afd84eef964"
+  },
+  "otrexporter": {
+    "url": "https://github.com/HarbourMasters/OTRExporter.git",
+    "revision": "32e088e28c8cdd055d4bb8f3f219d33ad37963f3"
+  },
+  "zapdtr": {
+    "url": "https://github.com/HarbourMasters/ZAPDTR.git",
+    "revision": "ee3397a365c5f350a60538c88f0643f155944836"
+  },
+  "sdl2": {
+    "url": "https://github.com/ps5-payload-dev/SDL.git",
+    "revision": "8c56053f13ca13a0c050de613706ff69eb615836"
+  },
+  "native_app_boilerplate": {
+    "url": "https://github.com/blackbearreloaded/ps5-native-app-boilerplate.git",
+    "revision": "c93771e0f9bf4f0993c3c317d7df4cc01888fb72"
+  },
+  "ps5_opengl_sdk": {
+    "version": "0.3.0",
+    "profile": "2160p120"
+  },
+  "dependencies": {
+    "zlib": [
+      "https://github.com/madler/zlib.git",
+      "v1.3.1"
+    ],
+    "libpng": [
+      "https://github.com/pnggroup/libpng.git",
+      "v1.6.44"
+    ],
+    "libzip": [
+      "https://github.com/nih-at/libzip.git",
+      "v1.10.1"
+    ],
+    "nlohmann_json": [
+      "https://github.com/nlohmann/json.git",
+      "v3.11.3"
+    ],
+    "tinyxml2": [
+      "https://github.com/leethomason/tinyxml2.git",
+      "10.0.0"
+    ],
+    "spdlog": [
+      "https://github.com/gabime/spdlog.git",
+      "v1.14.1"
+    ],
+    "ogg": [
+      "https://github.com/xiph/ogg.git",
+      "v1.3.5"
+    ],
+    "vorbis": [
+      "https://github.com/xiph/vorbis.git",
+      "v1.3.7"
+    ],
+    "opus": [
+      "https://github.com/xiph/opus.git",
+      "v1.5.2"
+    ],
+    "opusfile": [
+      "https://github.com/xiph/opusfile.git",
+      "v0.12"
+    ]
+  }
+}

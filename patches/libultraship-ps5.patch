@@ -1,0 +1,468 @@
+diff --git a/CMakeLists.txt b/CMakeLists.txt
+index 08cc791..66fce8a 100644
+--- a/CMakeLists.txt
++++ b/CMakeLists.txt
+@@ -68,6 +68,10 @@ if(CMAKE_SYSTEM_NAME STREQUAL "OpenBSD")
+     include(cmake/dependencies/openbsd.cmake)
+ endif()
+ 
++if(CMAKE_SYSTEM_NAME STREQUAL "PS5")
++    include(cmake/dependencies/ps5.cmake)
++endif()
++
+ if (CMAKE_SYSTEM_NAME STREQUAL "Windows")
+     include(cmake/dependencies/windows.cmake)
+ endif()
+diff --git a/cmake/dependencies/ps5.cmake b/cmake/dependencies/ps5.cmake
+new file mode 100644
+index 0000000..4c05aa9
+--- /dev/null
++++ b/cmake/dependencies/ps5.cmake
+@@ -0,0 +1,24 @@
++#=================== ImGui ===================
++# PS5: SDL2 video driver over the static ps5-opengl SDK (Core profile).
++find_package(SDL2 REQUIRED)
++target_link_libraries(ImGui PUBLIC SDL2::SDL2-static)
++target_include_directories(ImGui PUBLIC ${PS5_OPENGL_PREFIX}/include)
++
++# PS5: the ImGui OpenGL3 backend must call the console GL entry points directly.
++# Its bundled imgl3w loader dlopens libGL.so, which does not exist on the console.
++if(TARGET ImGui)
++    target_compile_definitions(ImGui PRIVATE IMGUI_IMPL_OPENGL_LOADER_CUSTOM)
++    get_target_property(_ps5_imgui_srcs ImGui SOURCES)
++    foreach(_ps5_s IN LISTS _ps5_imgui_srcs)
++        if(_ps5_s MATCHES "imgui_impl_opengl3\\.cpp$")
++            set_source_files_properties("${_ps5_s}" PROPERTIES COMPILE_OPTIONS "-include;GL/gl.h")
++        endif()
++    endforeach()
++endif()
++
++#=================== StormLib ===================
++# FreeBSD-style libc: off_t is already 64-bit (StormLib only maps these on macOS).
++if(TARGET storm)
++    target_compile_definitions(storm PRIVATE
++        stat64=stat fstat64=fstat lseek64=lseek ftruncate64=ftruncate off64_t=off_t O_LARGEFILE=0)
++endif()
+diff --git a/include/fast/backends/gfx_opengl.h b/include/fast/backends/gfx_opengl.h
+index af24c70..ffee035 100644
+--- a/include/fast/backends/gfx_opengl.h
++++ b/include/fast/backends/gfx_opengl.h
+@@ -39,6 +39,14 @@ struct ShaderProgram {
+     GLint texture_width_location;
+     GLint texture_height_location;
+     GLint texture_filtering_location;
++#ifdef __PROSPERO__
++    bool frameUniformsValid = false;
++    uint32_t lastFrameCount = 0;
++    float lastNoiseScale = 0.0f;
++    GLint lastTextureFiltering[2] = { -1, -1 };
++    GLint lastTextureWidth[2] = { -1, -1 };
++    GLint lastTextureHeight[2] = { -1, -1 };
++#endif
+ };
+ 
+ struct FramebufferOGL {
+@@ -123,7 +131,7 @@ class GfxRenderingAPIOGL final : public GfxRenderingAPI {
+     ShaderProgram* mLastLoadedShader = nullptr;
+ 
+     GLuint mOpenglVbo = 0;
+-#if defined(__APPLE__) || defined(USE_OPENGLES)
++#if defined(__APPLE__) || defined(USE_OPENGLES) || defined(__PROSPERO__)
+     GLuint mOpenglVao;
+ #endif
+ 
+diff --git a/src/fast/Fast3dGui.cpp b/src/fast/Fast3dGui.cpp
+index 237a502..ae2bdf1 100644
+--- a/src/fast/Fast3dGui.cpp
++++ b/src/fast/Fast3dGui.cpp
+@@ -26,6 +26,9 @@
+ 
+ #ifdef ENABLE_OPENGL
+ #include <imgui_impl_opengl3.h>
++#ifdef __PROSPERO__
++#include <GL/gl.h>
++#endif
+ #include <imgui_impl_sdl2.h>
+ #endif
+ 
+@@ -144,7 +147,7 @@ void Fast3dGui::ImGuiBackendInit() {
+     switch (mImpl.Backend) {
+ #ifdef ENABLE_OPENGL
+         case WindowBackend::FAST3D_SDL_OPENGL:
+-#ifdef __APPLE__
++#if defined(__APPLE__) || defined(__PROSPERO__)
+             ImGui_ImplOpenGL3_Init("#version 410 core");
+ #elif USE_OPENGLES
+             ImGui_ImplOpenGL3_Init("#version 300 es");
+@@ -417,7 +420,17 @@ void Fast3dGui::DrawGame() {
+     uintptr_t fb = Ship::Context::GetRawInstance()->GetWindow()->GetGfxFrameBuffer();
+     if (fb) {
+         ImGui::SetCursorPos(pos);
++#ifdef __PROSPERO__
++        // ps5-opengl stores render-target textures the other way up from desktop GL.
++        // The game target is RGBA8 on PS5 (needed for draw batching), so draw it opaque:
++        // its alpha channel is N64 blender output, not coverage.
++        ImGui::GetWindowDrawList()->AddCallback(
++            [](const ImDrawList*, const ImDrawCmd*) { glDisable(GL_BLEND); }, nullptr);
++        ImGui::Image(reinterpret_cast<ImTextureID>(fb), size, ImVec2(0.0f, 1.0f), ImVec2(1.0f, 0.0f));
++        ImGui::GetWindowDrawList()->AddCallback(ImDrawCallback_ResetRenderState, nullptr);
++#else
+         ImGui::Image(reinterpret_cast<ImTextureID>(fb), size);
++#endif
+     }
+ 
+     ImGui::End();
+diff --git a/src/fast/backends/gfx_opengl.cpp b/src/fast/backends/gfx_opengl.cpp
+index ad9b1dd..746b142 100644
+--- a/src/fast/backends/gfx_opengl.cpp
++++ b/src/fast/backends/gfx_opengl.cpp
+@@ -28,6 +28,15 @@
+ #include "ship/config/ConsoleVariable.h"
+ 
+ namespace Fast {
++#ifdef __PROSPERO__
++// ps5-opengl batches draws only into RGBA8 colour targets.
++#define PS5_FB_COLOR_FORMAT GL_RGBA8
++#define PS5_FB_COLOR_PIXELS GL_RGBA
++#else
++#define PS5_FB_COLOR_FORMAT GL_RGB8
++#define PS5_FB_COLOR_PIXELS GL_RGB
++#endif
++
+ int GfxRenderingAPIOGL::GetMaxTextureSize() {
+     GLint max_texture_size;
+     glGetIntegerv(GL_MAX_TEXTURE_SIZE, &max_texture_size);
+@@ -42,6 +51,16 @@ GfxClipParameters GfxRenderingAPIOGL::GetClipParameters() {
+     return { false, mFrameBuffers[mCurrentFrameBuffer].invertY };
+ }
+ 
++#ifdef __PROSPERO__
++// ps5-opengl reallocates kernel direct memory when glBufferData changes a buffer's size and
++// drains pending draw batches on writes to a buffer they reference. Rotate through a pool of
++// grow-only VBOs so each draw writes into a buffer the GPU is no longer using.
++static constexpr size_t kPs5VboPoolSize = 192;
++static GLuint g_ps5_vbos[kPs5VboPoolSize];
++static size_t g_ps5_vbo_capacity[kPs5VboPoolSize];
++static size_t g_ps5_vbo_next;
++#endif
++
+ static void VertexArraySetAttribs(ShaderProgram* prg) {
+     size_t numFloats = prg->numFloats;
+     size_t pos = 0;
+@@ -57,22 +76,58 @@ static void VertexArraySetAttribs(ShaderProgram* prg) {
+ }
+ 
+ void GfxRenderingAPIOGL::SetUniforms(ShaderProgram* prg) const {
++#ifdef __PROSPERO__
++    if (!prg->frameUniformsValid || prg->lastFrameCount != mFrameCount) {
++        glUniform1i(prg->frameCountLocation, mFrameCount);
++        prg->lastFrameCount = mFrameCount;
++    }
++    if (!prg->frameUniformsValid || prg->lastNoiseScale != mCurrentNoiseScale) {
++        glUniform1f(prg->noiseScaleLocation, mCurrentNoiseScale);
++        prg->lastNoiseScale = mCurrentNoiseScale;
++    }
++    prg->frameUniformsValid = true;
++#else
+     glUniform1i(prg->frameCountLocation, mFrameCount);
+     glUniform1f(prg->noiseScaleLocation, mCurrentNoiseScale);
++#endif
++}
++
++#ifdef __PROSPERO__
++static void SetTextureUniform(GLint location, const GLint values[2], GLint cached[2]) {
++    // Uniforms belong to programs, so switching away and back retains the cache.
++    if (cached[0] != values[0] || cached[1] != values[1]) {
++        glUniform1iv(location, 2, values);
++        cached[0] = values[0];
++        cached[1] = values[1];
++    }
+ }
++#endif
+ 
+ void GfxRenderingAPIOGL::SetPerDrawUniforms() {
+     glUniform1f(mCurrentShaderProgram->prim_depth_location, mCurrentPrimDepth);
+ 
+     if (mCurrentShaderProgram->usedTextures[0] || mCurrentShaderProgram->usedTextures[1]) {
+         GLint filtering[2] = { textures[mCurrentTextureIds[0]].filtering, textures[mCurrentTextureIds[1]].filtering };
++#ifdef __PROSPERO__
++        SetTextureUniform(mCurrentShaderProgram->texture_filtering_location, filtering,
++                          mCurrentShaderProgram->lastTextureFiltering);
++#else
+         glUniform1iv(mCurrentShaderProgram->texture_filtering_location, 2, filtering);
++#endif
+ 
+         GLint width[2] = { textures[mCurrentTextureIds[0]].width, textures[mCurrentTextureIds[1]].width };
++#ifdef __PROSPERO__
++        SetTextureUniform(mCurrentShaderProgram->texture_width_location, width, mCurrentShaderProgram->lastTextureWidth);
++#else
+         glUniform1iv(mCurrentShaderProgram->texture_width_location, 2, width);
++#endif
+ 
+         GLint height[2] = { textures[mCurrentTextureIds[0]].height, textures[mCurrentTextureIds[1]].height };
++#ifdef __PROSPERO__
++        SetTextureUniform(mCurrentShaderProgram->texture_height_location, height, mCurrentShaderProgram->lastTextureHeight);
++#else
+         glUniform1iv(mCurrentShaderProgram->texture_height_location, 2, height);
++#endif
+     }
+ }
+ 
+@@ -280,7 +335,7 @@ std::string GfxRenderingAPIOGL::BuildFsShader(const CCFeatures& cc_features) {
+         { "SHADER_NOISE", SHADER_NOISE },
+         { "o_three_point_filtering", mCurrentFilterMode == FILTER_THREE_POINT },
+         { "append_formula", (InvokeFunc)append_formula },
+-#ifdef __APPLE__
++#if defined(__APPLE__) || defined(__PROSPERO__)
+         { "GLSL_VERSION", "#version 410 core" },
+         { "attr", "in" },
+         { "opengles", false },
+@@ -351,7 +406,7 @@ static std::string BuildVsShader(const CCFeatures& cc_features) {
+                                      { "o_alpha", cc_features.opt_alpha },
+                                      { "o_inputs", cc_features.numInputs },
+                                      { "update_floats", (InvokeFunc)UpdateFloats },
+-#ifdef __APPLE__
++#if defined(__APPLE__) || defined(__PROSPERO__)
+                                      { "GLSL_VERSION", "#version 410 core" },
+                                      { "attr", "in" },
+                                      { "out", "out" },
+@@ -703,19 +758,42 @@ void GfxRenderingAPIOGL::DrawTriangles(float buf_vbo[], size_t buf_vbo_len, size
+     SetPerDrawUniforms();
+ 
+     // printf("flushing %d tris\n", buf_vbo_num_tris);
++#ifdef __PROSPERO__
++    {
++        const size_t slot = g_ps5_vbo_next;
++        g_ps5_vbo_next = (slot + 1) % kPs5VboPoolSize;
++        const size_t bytes = sizeof(float) * buf_vbo_len;
++        glBindBuffer(GL_ARRAY_BUFFER, g_ps5_vbos[slot]);
++        if (bytes > g_ps5_vbo_capacity[slot]) {
++            size_t capacity = 16 * 1024;
++            while (capacity < bytes) {
++                capacity *= 2;
++            }
++            glBufferData(GL_ARRAY_BUFFER, capacity, nullptr, GL_DYNAMIC_DRAW);
++            g_ps5_vbo_capacity[slot] = capacity;
++        }
++        glBufferSubData(GL_ARRAY_BUFFER, 0, bytes, buf_vbo);
++        // Attribute pointers capture the bound buffer, so re-point them at this slot.
++        VertexArraySetAttribs(mCurrentShaderProgram);
++    }
++#else
+     glBufferData(GL_ARRAY_BUFFER, sizeof(float) * buf_vbo_len, buf_vbo, GL_STREAM_DRAW);
++#endif
+     glDrawArrays(GL_TRIANGLES, 0, 3 * buf_vbo_num_tris);
+ }
+ 
+ void GfxRenderingAPIOGL::Init() {
+-#if !defined(__linux__) && !defined(__OpenBSD__)
++#if !defined(__linux__) && !defined(__OpenBSD__) && !defined(__PROSPERO__)
+     glewInit();
+ #endif
+ 
+     glGenBuffers(1, &mOpenglVbo);
+     glBindBuffer(GL_ARRAY_BUFFER, mOpenglVbo);
++#ifdef __PROSPERO__
++    glGenBuffers(kPs5VboPoolSize, g_ps5_vbos);
++#endif
+ 
+-#if defined(__APPLE__) || defined(USE_OPENGLES)
++#if defined(__APPLE__) || defined(USE_OPENGLES) || defined(__PROSPERO__)
+     glGenVertexArrays(1, &mOpenglVao);
+     glBindVertexArray(mOpenglVao);
+ #endif
+@@ -761,7 +839,7 @@ int GfxRenderingAPIOGL::CreateFramebuffer() {
+     GLuint clrbuf;
+     glGenTextures(1, &clrbuf);
+     glBindTexture(GL_TEXTURE_2D, clrbuf);
+-    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB8, 1, 1, 0, GL_RGB, GL_UNSIGNED_BYTE, NULL);
++    glTexImage2D(GL_TEXTURE_2D, 0, PS5_FB_COLOR_FORMAT, 1, 1, 0, PS5_FB_COLOR_PIXELS, GL_UNSIGNED_BYTE, NULL);
+     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+     glBindTexture(GL_TEXTURE_2D, 0);
+@@ -804,12 +882,12 @@ void GfxRenderingAPIOGL::UpdateFramebufferParameters(int fb_id, uint32_t width,
+         if (fb.width != width || fb.height != height || fb.msaa_level != msaa_level) {
+             if (msaa_level <= 1) {
+                 glBindTexture(GL_TEXTURE_2D, fb.clrbuf);
+-                glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB8, width, height, 0, GL_RGB, GL_UNSIGNED_BYTE, NULL);
++                glTexImage2D(GL_TEXTURE_2D, 0, PS5_FB_COLOR_FORMAT, width, height, 0, PS5_FB_COLOR_PIXELS, GL_UNSIGNED_BYTE, NULL);
+                 glBindTexture(GL_TEXTURE_2D, 0);
+                 glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, fb.clrbuf, 0);
+             } else {
+                 glBindRenderbuffer(GL_RENDERBUFFER, fb.clrbufMsaa);
+-                glRenderbufferStorageMultisample(GL_RENDERBUFFER, msaa_level, GL_RGB8, width, height);
++                glRenderbufferStorageMultisample(GL_RENDERBUFFER, msaa_level, PS5_FB_COLOR_FORMAT, width, height);
+                 glBindRenderbuffer(GL_RENDERBUFFER, 0);
+                 glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_RENDERBUFFER, fb.clrbufMsaa);
+             }
+@@ -978,7 +1056,7 @@ void GfxRenderingAPIOGL::CopyFramebuffer(int fb_dst_id, int fb_src_id, int srcX0
+ 
+     // The 0 buffer is a double buffer so we need to choose the back to avoid imgui elements
+     if (fb_src_id == 0) {
+-        glReadBuffer(GL_BACK);
++        glReadBuffer(GL_COLOR_ATTACHMENT0);
+     } else {
+         glReadBuffer(GL_COLOR_ATTACHMENT0);
+     }
+@@ -987,7 +1065,7 @@ void GfxRenderingAPIOGL::CopyFramebuffer(int fb_dst_id, int fb_src_id, int srcX0
+ 
+     glBindFramebuffer(GL_FRAMEBUFFER, mFrameBuffers[mCurrentFrameBuffer].fbo);
+ 
+-    glReadBuffer(GL_BACK);
++    glReadBuffer(GL_COLOR_ATTACHMENT0);
+ 
+     if (mLastScissorEnabled != 1) {
+         mLastScissorEnabled = 1;
+diff --git a/src/fast/backends/gfx_sdl2.cpp b/src/fast/backends/gfx_sdl2.cpp
+index 15c5415..0aa29f0 100644
+--- a/src/fast/backends/gfx_sdl2.cpp
++++ b/src/fast/backends/gfx_sdl2.cpp
+@@ -218,6 +218,11 @@ void GfxWindowBackendSDL2::SetFullscreenImpl(bool on, bool call_callback) {
+     if (mFullScreen == on) {
+         return;
+     }
++#ifdef __PROSPERO__
++    // The PS5 window is always the full display.
++    mFullScreen = on;
++    return;
++#endif
+ 
+     int display_in_use = SDL_GetWindowDisplayIndex(mWnd);
+     if (display_in_use < 0) {
+@@ -352,6 +357,12 @@ void GfxWindowBackendSDL2::Init(const char* gameName, const char* gfxApiName, bo
+     SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 1);
+ #endif
+ 
++#ifdef __PROSPERO__
++    SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_CORE);
++    SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 3);
++    SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 3);
++#endif
++
+ #ifdef _WIN32
+     // Use high-resolution mTimer by default on Windows 10 (so that NtSetTimerResolution (...) hacks are not needed)
+     mTimer = CreateWaitableTimerExW(nullptr, nullptr, CREATE_WAITABLE_TIMER_HIGH_RESOLUTION, TIMER_ALL_ACCESS);
+@@ -379,6 +390,20 @@ void GfxWindowBackendSDL2::Init(const char* gameName, const char* gfxApiName, bo
+     Uint32 flags = SDL_WINDOW_SHOWN | SDL_WINDOW_RESIZABLE | SDL_WINDOW_ALLOW_HIGHDPI;
+ #endif
+ 
++#ifdef __PROSPERO__
++    flags = SDL_WINDOW_SHOWN;
++    posX = 0;
++    posY = 0;
++    {
++        SDL_DisplayMode desktop;
++        if (SDL_GetDesktopDisplayMode(0, &desktop) == 0) {
++            mWindowWidth = desktop.w;
++            mWindowHeight = desktop.h;
++        }
++    }
++    startFullScreen = false;
++#endif
++
+     if (use_opengl) {
+         flags = flags | SDL_WINDOW_OPENGL;
+     } else {
+diff --git a/src/fast/interpreter.cpp b/src/fast/interpreter.cpp
+index 01883c8..65d8f89 100644
+--- a/src/fast/interpreter.cpp
++++ b/src/fast/interpreter.cpp
+@@ -5074,7 +5074,13 @@ void Interpreter::StartFrame() {
+ 
+     mPrvDimensions = mCurDimensions;
+     mPrevNativeDimensions = mNativeDimensions;
+-    if (!ViewportMatchesRendererResolution() || mMsaaLevel > 1) {
++#ifdef __PROSPERO__
++    // PS5 scanout is BGRA: always present through ImGui, whose shader swaps R/B.
++    const bool forceRenderToFb = true;
++#else
++    const bool forceRenderToFb = false;
++#endif
++    if (forceRenderToFb || !ViewportMatchesRendererResolution() || mMsaaLevel > 1) {
+         mRendersToFb = true;
+         if (!ViewportMatchesRendererResolution()) {
+             mRapi->UpdateFramebufferParameters(mGameFb, mCurDimensions.width, mCurDimensions.height, mMsaaLevel, true,
+@@ -5118,7 +5124,12 @@ void Interpreter::RunGuiOnly() {
+ 
+     if (mRendersToFb) {
+         mRapi->StartDrawToFramebuffer(0, 1);
++#ifdef __PROSPERO__
++        // Only ImGui draws to the window on PS5 and it never uses depth.
++        mRapi->ClearFramebuffer(true, false);
++#else
+         mRapi->ClearFramebuffer(true, true);
++#endif
+         if (mMsaaLevel > 1) {
+             if (!ViewportMatchesRendererResolution()) {
+                 mRapi->ResolveMSAAColorBuffer(mGameFbMsaaResolved, mGameFb);
+@@ -5183,7 +5194,12 @@ void Interpreter::Run(Gfx* commands, const std::unordered_map<Mtx*, MtxF>& mtx_r
+ 
+     if (mRendersToFb) {
+         mRapi->StartDrawToFramebuffer(0, 1);
++#ifdef __PROSPERO__
++        // Only ImGui draws to the window on PS5 and it never uses depth.
++        mRapi->ClearFramebuffer(true, false);
++#else
+         mRapi->ClearFramebuffer(true, true);
++#endif
+         if (mMsaaLevel > 1) {
+             if (!ViewportMatchesRendererResolution()) {
+                 mRapi->ResolveMSAAColorBuffer(mGameFbMsaaResolved, mGameFb);
+diff --git a/src/ship/Context.cpp b/src/ship/Context.cpp
+index 361a1f7..45b2d2a 100644
+--- a/src/ship/Context.cpp
++++ b/src/ship/Context.cpp
+@@ -23,6 +23,11 @@
+ #include <stringapiset.h>
+ #endif
+ 
++#ifdef __PROSPERO__
++#include <sys/stat.h>
++#include <unistd.h>
++#endif
++
+ #ifdef __APPLE__
+ #include "ship/utils/AppleFolderManager.h"
+ #include <unistd.h>
+@@ -474,6 +479,10 @@ std::string Context::GetShortName() const {
+ }
+ 
+ std::string Context::GetAppBundlePath() {
++#ifdef __PROSPERO__
++    return "/app0/assets"; // read-only title folder holding soh.o2r / oot.o2r
++#endif
++
+ #if defined(__ANDROID__)
+     const char* externaldir = SDL_AndroidGetExternalStoragePath();
+     if (externaldir != NULL) {
+@@ -537,6 +546,19 @@ std::string Context::GetAppBundlePath() {
+ }
+ 
+ std::string Context::GetAppDirectoryPath(const std::string& appName) {
++#ifdef __PROSPERO__
++    static const std::string dataPath = [] {
++        // Folder titles run from a writable /app0.
++        const char* shared = "/app0/UserData";
++        mkdir(shared, 0777);
++        std::string path = access(shared, W_OK) == 0 ? shared : "/download0";
++        // Relative paths used by the game resolve inside the writable data folder.
++        chdir(path.c_str());
++        return path;
++    }();
++    return dataPath;
++#endif
++
+ #if defined(__ANDROID__)
+     const char* externaldir = SDL_AndroidGetExternalStoragePath();
+     if (externaldir != NULL) {
+@@ -605,6 +627,10 @@ std::string Context::LocateFileAcrossAppDirs(const std::string& path, const std:
+     if (std::filesystem::exists(fpath)) {
+         return fpath;
+     }
++#ifdef __PROSPERO__
++    // The title's working directory is not accessible; report the install path instead.
++    return fpath;
++#endif
+     // current dir
+     return "./" + std::string(path);
+ }

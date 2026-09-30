@@ -1,0 +1,16 @@
+diff --git a/tooling/native/sce_module_writer.cpp b/tooling/native/sce_module_writer.cpp
+index b41dd9f..b337a6a 100644
+--- a/tooling/native/sce_module_writer.cpp
++++ b/tooling/native/sce_module_writer.cpp
+@@ -838,7 +838,10 @@ Bytes write_executable(const Image &image, std::span<const Stub> stubs, const Op
+             continue;
+         copy_bytes(output, input.file_offset, input.data);
+     }
+-    const std::uint64_t relro_file = got.file_offset;
++    // .data.rel.ro can precede .got; map the beginning of the RELRO region.
++    const std::uint64_t relro_file = got.file_offset - (got.address - relro_start);
++    require(relro_file % kPage == relro_start % kPage,
++            "RELRO file offset is not congruent with its virtual address");
+     copy_bytes(output, relro_file + process_address - relro_start, process_parameters);
+     copy_bytes(output, relro_file + blocks_address - relro_start, blocks.data);
+     copy_bytes(output, dynamic_file_at(string_address), dynamic_strings);
