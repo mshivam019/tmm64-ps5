@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Index SoH HD/mod archives for PS5, where directory enumeration is unavailable."""
+"""Index 2Ship HD/mod archives for PS5, where directory enumeration is unavailable."""
 import argparse
 from pathlib import Path
 

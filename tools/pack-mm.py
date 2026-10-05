@@ -9,6 +9,7 @@ Run in WSL after `ninja mm/2ship` has compiled everything (the CMake link step i
 expected to fail; the real link happens here).
 """
 import argparse
+import hashlib
 import json
 import os
 import re
@@ -71,6 +72,7 @@ def main():
     parser.add_argument("--out", type=Path, default=ROOT / "build/mm-pkg")
     parser.add_argument("--heap-mib", type=int, default=2048,
                         help="app heap reserved from direct memory (default 2048)")
+    parser.add_argument("--without-game-assets", action="store_true", help="executable update; preserve installed assets")
     args = parser.parse_args()
     profile_path = GL_PREFIX / "share/soh-build-profile.json"
     profile = json.loads(profile_path.read_text()) if profile_path.exists() else None
@@ -139,7 +141,7 @@ def main():
     (out / "sce_sys/snd0.at9").unlink(missing_ok=True)
 
     # Game data (read-only, /app0/assets on the console).
-    for name in ("mm.o2r", "2ship.o2r"):
+    for name in (() if args.without_game_assets else ("mm.o2r", "2ship.o2r")):
         shutil.copy2(SOURCE / name, out / "assets" / name)
     shutil.copy2(BUILD / "gamecontrollerdb.txt", out / "assets/gamecontrollerdb.txt")
 
@@ -191,6 +193,11 @@ def main():
     if "PosixForWebKit" in needed:
         raise SystemExit("eboot still imports libScePosixForWebKit")
     app = out / "dist" / TITLE_ID
+    profile = dict(profile or {})
+    profile.update({"controls_variant": "camera-controls" if (SOURCE / "mm/2s2h/Enhancements/Camera/PS5CameraProfile.h").exists() else "stock",
+                    "game_assets_included": not args.without_game_assets,
+                    "eboot_sha256": hashlib.sha256((app / "eboot.bin").read_bytes()).hexdigest(),
+                    "default_interpolation_fps": 60})
     if profile:
         (app / "build-profile.json").write_text(json.dumps(profile, indent=2) + "\n")
     print(f"2 Ship 2 Harkinian title folder: {app}")

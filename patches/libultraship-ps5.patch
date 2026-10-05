@@ -72,7 +72,7 @@ index af24c70..ffee035 100644
  #endif
  
 diff --git a/src/fast/Fast3dGui.cpp b/src/fast/Fast3dGui.cpp
-index 237a502..ae2bdf1 100644
+index 237a502..8d0c2be 100644
 --- a/src/fast/Fast3dGui.cpp
 +++ b/src/fast/Fast3dGui.cpp
 @@ -26,6 +26,9 @@
@@ -85,7 +85,26 @@ index 237a502..ae2bdf1 100644
  #include <imgui_impl_sdl2.h>
  #endif
  
-@@ -144,7 +147,7 @@ void Fast3dGui::ImGuiBackendInit() {
+@@ -70,6 +73,18 @@ void Fast3dGui::HandleWindowEvents(Fast::WindowEvent event) {
+         case WindowBackend::FAST3D_SDL_OPENGL:
+         case WindowBackend::FAST3D_SDL_METAL:
+             ImGui_ImplSDL2_ProcessEvent(static_cast<const SDL_Event*>(event.Sdl.Event));
++#ifdef __PROSPERO__
++            // PS5 SDL has touchpad input but no Back button. Options remains Start.
++            if (const auto* sdlEvent = static_cast<const SDL_Event*>(event.Sdl.Event);
++                sdlEvent->type == SDL_CONTROLLERBUTTONDOWN &&
++                sdlEvent->cbutton.button == SDL_CONTROLLER_BUTTON_TOUCHPAD) {
++                if (GetMenu()) GetMenu()->ToggleVisibility();
++                else if (GetMenuBar()) GetMenuBar()->ToggleVisibility();
++                Ship::Context::GetRawInstance()->GetConsoleVariables()->SetInteger(CVAR_IMGUI_CONTROLLER_NAV, 1);
++                UpdateGamepadNavigation();
++                Ship::Context::GetRawInstance()->GetWindow()->GetMouseStateManager()->UpdateMouseCapture();
++            }
++#endif
+ #if defined(__ANDROID__) || defined(__IOS__)
+             Ship::Mobile::ImGuiProcessEvent(ImGui::GetIO().WantTextInput);
+ #endif
+@@ -144,7 +159,7 @@ void Fast3dGui::ImGuiBackendInit() {
      switch (mImpl.Backend) {
  #ifdef ENABLE_OPENGL
          case WindowBackend::FAST3D_SDL_OPENGL:
@@ -94,7 +113,7 @@ index 237a502..ae2bdf1 100644
              ImGui_ImplOpenGL3_Init("#version 410 core");
  #elif USE_OPENGLES
              ImGui_ImplOpenGL3_Init("#version 300 es");
-@@ -417,7 +420,17 @@ void Fast3dGui::DrawGame() {
+@@ -417,7 +432,17 @@ void Fast3dGui::DrawGame() {
      uintptr_t fb = Ship::Context::GetRawInstance()->GetWindow()->GetGfxFrameBuffer();
      if (fb) {
          ImGui::SetCursorPos(pos);

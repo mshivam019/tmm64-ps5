@@ -26,5 +26,6 @@ export PS5_SDL2_PREFIX=$PS5_SDL2_BUILD/sdk
 
 # Game calls SDL for the fixed window dimensions; it does not bake in this profile.
 # Compile its objects once, then package with the selected SDL and GL libraries.
+bash "$REPO/tools/apply-camera-controls.sh"
 python3 "$REPO/tools/compile-mm.py" "$MM_BUILD"
 python3 "$REPO/tools/pack-mm.py" --out "$PS5SDK_ROOT/build/mm-$profile"

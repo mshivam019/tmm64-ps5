@@ -9,6 +9,7 @@
 #   tools/check-build.sh --dir /path/PPSA99621
 #   tools/check-build.sh --json               # machine-readable summary
 #   tools/check-build.sh --release --dir /path/PPSA99621  # must omit mm.o2r
+#   tools/check-build.sh --update --variant camera-controls --dir /path/PPSA99621
 #   tools/check-build.sh --self-test          # check the checker on synthetic folders
 set -uo pipefail
 
@@ -24,17 +25,24 @@ CONTENT_ID=UP9000-PPSA99621_00-2SHIP2HARKINIAN0
 DIR=
 JSON=0
 RELEASE=0
+UPDATE=0
+VARIANT=
 while [ $# -gt 0 ]; do
     case $1 in
         --dir) DIR=${2:?--dir needs a path}; shift 2 ;;
         --dir=*) DIR=${1#*=}; shift ;;
         --json) JSON=1; shift ;;
+        --update) UPDATE=1; shift ;;
+        --variant) VARIANT=${2:?--variant needs stock or camera-controls}; shift 2 ;;
         --release) RELEASE=1; shift ;;
         --self-test) SELF_TEST=1; shift ;;
         -h|--help) sed -n '2,11p' "$0"; exit 0 ;;
         *) echo "unknown argument: $1" >&2; exit 2 ;;
     esac
 done
+
+case "$VARIANT" in ""|stock|camera-controls) ;; *) echo "Invalid controls variant: $VARIANT" >&2; exit 2 ;; esac
+if [ "$UPDATE" = 1 ] && [ "$RELEASE" = 1 ]; then echo "--update and --release are separate package modes" >&2; exit 2; fi
 
 # Build a synthetic title folder that passes, then break it one way at a time and
 # confirm each break is caught. Needs no SDK, build or game data.
@@ -115,6 +123,22 @@ PYCHECKSUM
 
     c=$(case_dir); rm "$c/assets/mm.o2r"; expect 0 "release without private data" "$c" --release
     expect 1 "release rejects private game archive" "$work/good" --release
+    c=$(case_dir); mkdir -p "$c/assets/mods"; cp "$c/assets/2ship.o2r" "$c/assets/mods/HD.o2r"
+    expect 1 "HD archive requires manifest" "$c"
+    echo HD.o2r >"$c/assets/mods/mods.txt"; expect 0 "indexed HD archive" "$c"
+    echo missing.o2r >"$c/assets/mods/mods.txt"; expect 1 "missing indexed archive" "$c"
+    echo ../2ship.o2r >"$c/assets/mods/mods.txt"; expect 1 "manifest path traversal" "$c"
+    c=$(case_dir); rm -rf "$c/assets" "$c/sce_sys"
+    python3 - "$c" <<'PYUPDATE'
+import json,hashlib,sys
+from pathlib import Path
+p=Path(sys.argv[1]); (p/'build-profile.json').write_text(json.dumps({'display_profile':{'width':3840,'height':2160,'fps':120},'game_assets_included':False,'controls_variant':'camera-controls','eboot_sha256':hashlib.sha256((p/'eboot.bin').read_bytes()).hexdigest()}))
+PYUPDATE
+    expect 0 "camera executable update" "$c" --update --variant camera-controls
+    expect 1 "camera rejected as stock" "$c" --update --variant stock
+    expect 1 "update rejected as full installation" "$c"
+    printf tamper >>"$c/eboot.bin"; expect 1 "update executable tamper" "$c" --update
+    rm "$c/build-profile.json"; expect 1 "update requires receipt" "$c" --update
     bash "$self" --dir "$work/good" --json >"$work/result.json"
     if python3 -c 'import json,sys; d=json.load(open(sys.argv[1])); assert not d["failures"]' "$work/result.json"; then
         echo "  ok    JSON output parses"; passed=$((passed + 1))
@@ -263,6 +287,7 @@ PY
 
 check_file eboot.bin 1000000 4f153d1d "eboot.bin"
 check_file sce_module/libc.prx 100000 5414f5ee "sce_module/libc.prx"
+if [ "$UPDATE" = 0 ]; then
 if [ "$RELEASE" = 1 ]; then
     check_absent assets/mm.o2r
 else
@@ -274,18 +299,29 @@ check_file sce_sys/param.json 100 "" "sce_sys/param.json"
 check_file sce_sys/icon0.png 1024 89504e470d0a1a0a "sce_sys/icon0.png"
 check_file sce_sys/pic0.dds 1024 44445320 "sce_sys/pic0.dds"
 check_file sce_sys/pic1.dds 1024 44445320 "sce_sys/pic1.dds"
-check_absent sce_sys/snd0.at9
-check_absent perf.txt
 check_zip assets/mm.o2r
 check_zip assets/2ship.o2r
 check_param
+else
+    WARN+=("executable update only; preserve installed game assets, metadata and saves")
+fi
+check_absent sce_sys/snd0.at9
+check_absent perf.txt
+mods_result=$(python3 "$REPO/tools/check-mods.py" "$DIR" 2>&1)
+if [ $? = 0 ]; then OK+=("$mods_result"); else FAIL+=("mod manifest validation: $mods_result"); fi
 
 if [ -f "$DIR/build-profile.json" ]; then
-    profile_error=$(python3 - "$DIR/build-profile.json" <<'PYPROFILE'
+    profile_error=$(python3 - "$DIR/build-profile.json" "$VARIANT" "$UPDATE" <<'PYPROFILE'
 import json,sys,hashlib
 from pathlib import Path
 try:
     path=Path(sys.argv[1]); p=json.loads(path.read_text())
+    if not isinstance(p, dict): raise ValueError('profile must be an object')
+    variant=p.get('controls_variant', 'stock')
+    if variant not in ('stock', 'camera-controls'): raise ValueError('unknown controls variant')
+    if sys.argv[2] and variant != sys.argv[2]: raise ValueError('controls variant mismatch')
+    if sys.argv[3] == '1' and p.get('game_assets_included') is not False: raise ValueError('update requires game_assets_included=false')
+    if (sys.argv[3] == '1' or variant == 'camera-controls') and not p.get('eboot_sha256'): raise ValueError('missing executable checksum')
     d=p['display_profile']
     if (d['width'],d['height']) not in ((1920,1080),(2560,1440),(3840,2160)) or d['fps'] not in (60,120):
         raise ValueError('unsupported or inconsistent display profile')
@@ -301,7 +337,7 @@ PYPROFILE
         FAIL+=("build-profile.json: $profile_error")
     fi
 else
-    WARN+=("no build-profile.json (stock 0.3.0 driver profile)")
+    if [ "$UPDATE" = 1 ] || [ "$VARIANT" = camera-controls ]; then FAIL+=("build-profile.json required for update/camera variant"); else WARN+=("no build-profile.json (stock 0.3.0 driver profile)"); fi
 fi
 
 if [ "$JSON" = 1 ]; then

@@ -19,3 +19,6 @@ ps5/art/*-source.png
 
 __pycache__/
 *.stackdump
+
+# Local upstream source inspection/builds
+.work-*/

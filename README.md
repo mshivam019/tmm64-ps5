@@ -7,7 +7,7 @@ A native PS5 port of **2 Ship 2 Harkinian 5.0.1**, built on the PS5 OpenGL runti
 ## Features
 
 - 3840 × 2160 output, with a 120 Hz display request and automatic 60 Hz fallback.
-- 60 FPS interpolation by default; display refresh is not a promise of game frame rate.
+- Fixed 60 FPS interpolation on PS5; display refresh is not a promise of game frame rate.
 - Matched OpenGL/SDL performance improvements from the Ocarina port.
 - DualSense controls and gamepad menu navigation.
 - Widescreen HUD alignment by default, preserving existing custom HUD settings.
@@ -57,8 +57,7 @@ Building from source instead is covered in [docs/BUILDING.md](docs/BUILDING.md).
 For HD textures and the optional OOT Save label, see [Console setup](docs/CONSOLE-SETUP.md).
 
 **120 Hz:** the release is the `2160p120` build. It asks for 120 Hz output when the
-display supports it and otherwise stays at 60 Hz. Keep **Interpolation FPS** at
-**60**. Full-game frame-rate performance and 120 Hz output remain unverified.
+display supports it and otherwise stays at 60 Hz. New source builds fix interpolation at **60 FPS**. Full-game frame-rate performance and 120 Hz output remain unverified.
 
 ROMs, ROM-derived game archives, saves and texture packs are not included.
 
@@ -68,19 +67,29 @@ Cross is N64 A, Circle is N64 B, and Options opens pause. With pause saving enab
 
 The final label fix supports the original OOT Save lettering, including the matching HD replacement. See [Save-label setup](docs/CONSOLE-SETUP.md#matching-oot-save-label) to import it from your own OOT assets. Without that optional archive, the original Return label remains; saving still works.
 
+## Settings and language changes
+
+Press **touchpad** for the port menu; **Options** remains the game pause/save menu. New source builds show the active config folder and fix interpolation at 60 FPS. Existing v1.0.0 binaries predate the touchpad change. See [settings, language and optional right-stick camera controls](docs/SETTINGS.md).
+
+2Ship 5.0.1 uses supported US assets and English text. German and Spanish are not selectable in this port. SoH’s language settings do not apply to Majora’s Mask.
+
 ## HD textures
 
-Download the **2Ship O2R HD** edition of [GhostlyDark’s MM Reloaded](https://evilgames.eu/texture-packs/mm-reloaded.htm). Extract its `.o2r` into `assets/mods/`, then create `assets/mods/mods.txt` listing its filename, one archive per line. Alternate assets are enabled by default. The HD edition is the one used with this 4K build; higher-resolution packs can increase memory use and loading time.
+Follow the [HD texture/mod setup guide](docs/MODS.md) for the exact **2Ship O2R HD** download, extraction, `mods.txt`, FileZilla paths, enabling alternate assets and troubleshooting. Upload both the archive and its manifest; a texture archive alone is insufficient.
 
 ## Validation and known limits
 
 The packaged executable has booted on PS5 firmware 9.00. Startup, HD archive loading and the pause-save configuration were checked, and the user confirmed the pause-save action works; a full playthrough and every save location have not been verified. Audio improved in an on-console check after correcting the playback address filter. Regression checks cover low-address audio notes, 64-bit message storage and exhausted sample positions. Music quality and all individual effects have not been exhaustively verified. Defensive audio checks remain enabled. If an audio guard triggers, preserve the title’s `mm-adpcm-range.txt` diagnostic when reporting the problem.
 
-Save/configuration files live in the title’s sandbox `/download0` area. Preserve that data when updating; it is separate from the installed assets folder. Do not overwrite a running title.
+The new menu/camera changes have been checked in source/build tooling but still need console testing. Earlier hardware results above refer to the released build. Save/configuration files use writable `/app0/UserData` where available, otherwise the title’s `/download0` sandbox. Preserve that data when updating; it is separate from the installed assets folder. Do not overwrite a running title.
 
 ## Build validation
 
-Run `bash tools/check-build.sh --self-test` to test the validator, or `bash tools/check-build.sh --dir /path/to/PPSA99621` to check a complete title. Add `--release` for packages without private game data, and `--json` for machine-readable results. Release packaging runs these checks automatically.
+Run `bash tools/check-build.sh --self-test` to test the validator, or `bash tools/check-build.sh --dir /path/to/PPSA99621` to check a complete title. Add `--release` for packages without private game data, `--update` for executable-only updates, `--variant stock` or `--variant camera-controls` to check controller provenance, and `--json` for machine-readable results. Release packaging runs these checks automatically.
+
+## ROM used in this workspace
+
+The retained test ROM is **Majora’s Mask (USA), NTSC-U 1.0**, 33,554,432 bytes, SHA-1 `d6133ace5afaa0882cf214cf88daba39e266c078`. It matches the pinned upstream supported hashes. This identifies the local test input; it does not establish new camera/menu gameplay validation. Extract your own supported ROM with official 2Ship 5.0.1.
 
 ## Credits and license
 

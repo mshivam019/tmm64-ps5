@@ -19,7 +19,7 @@ Windows PowerShell:
 
 5. Register/mount the folder with ShadowMountPlus using your existing console workflow, then launch the game tile. The upload scripts transfer files; they do not remotely close games or launch the title.
 
-For updates, preserve your sandbox saves and configuration. Optional texture packs go in `assets/mods/`; list each archive’s filename in `assets/mods/mods.txt`. Restart after changing assets.
+For updates, preserve your UserData and sandbox saves/configuration. See [settings and camera controls](SETTINGS.md) and [HD texture setup](MODS.md). Optional texture packs go in `assets/mods/`; list each archive’s filename in `assets/mods/mods.txt`. Restart after changing assets.
 
 Pause with Options, then press Circle to open saving where permitted. Opening areas before Clock Town and certain gameplay states intentionally prohibit saving.
 

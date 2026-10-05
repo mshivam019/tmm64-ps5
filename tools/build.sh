@@ -4,6 +4,8 @@
 set -euo pipefail
 source "$(dirname "$0")/env.sh"
 
+bash "$REPO/tools/apply-camera-controls.sh"
+
 cmake -S "$MM_SOURCE" -B "$MM_BUILD" -G Ninja -DCMAKE_TOOLCHAIN_FILE="$TOOLCHAIN" \
     -DCMAKE_BUILD_TYPE=Release -DBUILD_CROWD_CONTROL=OFF -DENABLE_SCRIPTING=OFF \
     -DDISABLE_DLL_LOADER=ON
