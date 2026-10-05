@@ -4,6 +4,8 @@ A native PS5 port of **2 Ship 2 Harkinian 5.0.1**, built on the PS5 OpenGL runti
 
 [Download the latest release](https://github.com/mshivam019/tmm64-ps5/releases/latest) · [Console setup](docs/CONSOLE-SETUP.md) · [Build from source](docs/BUILDING.md)
 
+[Release v1.1.0](https://github.com/mshivam019/tmm64-ps5/releases/tag/v1.1.0) includes the tested controller menu fixes and independent camera/HD toggles, enabled by default. Saved off choices are preserved; HD archives must be installed separately. See [settings](docs/SETTINGS.md) and [mod installation](docs/MODS.md).
+
 ## Features
 
 - 3840 × 2160 output, with a 120 Hz display request and automatic 60 Hz fallback.
