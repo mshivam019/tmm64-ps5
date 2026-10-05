@@ -30,7 +30,7 @@ index a9378e8..612df1f 100644
  if(CMAKE_SYSTEM_NAME MATCHES "Linux")
  file(COPY ${CMAKE_SOURCE_DIR}/mm/linux/2s2hIcon.png DESTINATION ${CMAKE_CURRENT_BINARY_DIR})
 diff --git a/mm/2s2h/BenPort.cpp b/mm/2s2h/BenPort.cpp
-index 653de66..e305595 100644
+index 653de66..9522e66 100644
 --- a/mm/2s2h/BenPort.cpp
 +++ b/mm/2s2h/BenPort.cpp
 @@ -1,3 +1,6 @@
@@ -40,7 +40,19 @@ index 653de66..e305595 100644
  #include "BenPort.h"
  #include <iostream>
  #include <algorithm>
-@@ -312,7 +315,12 @@ void OTRGlobals::RunExtract(int argc, char* argv[]) {
+@@ -195,7 +198,11 @@ OTRGlobals::OTRGlobals() {
+     }
+ 
+     previousImGuiScaleIndex = -1;
++#ifdef __PROSPERO__
++    previousImGuiScale = 1.0f;
++#else
+     previousImGuiScale = defaultImGuiScale;
++#endif
+     ScaleImGui();
+ }
+ 
+@@ -312,7 +319,12 @@ void OTRGlobals::RunExtract(int argc, char* argv[]) {
      OSFatal();
  #endif
  
@@ -53,7 +65,7 @@ index 653de66..e305595 100644
          BenGui::RegisterPopup("Extractor assets not found",
                                "No O2R files found. Missing 'assets/' folder needed to generate OTR file.\nPlease "
                                "re-extract them from the download or.\n\nExiting...",
-@@ -346,7 +354,7 @@ void OTRGlobals::RunExtract(int argc, char* argv[]) {
+@@ -346,7 +358,7 @@ void OTRGlobals::RunExtract(int argc, char* argv[]) {
                  if (shipArchiveVersionMatch) {
  #ifdef _WIN32
                      extractStep = ES_WINDOWS;
@@ -62,7 +74,7 @@ index 653de66..e305595 100644
                      extractStep = ES_VERIFY;
  #else
                      extractStep = args.empty() ? ES_EXTRACT : ES_EXTRACT_ARGS;
-@@ -624,6 +632,40 @@ void OTRGlobals::Initialize() {
+@@ -624,6 +636,40 @@ void OTRGlobals::Initialize() {
  #endif
      context->InitConfiguration();
      context->InitConsoleVariables();
@@ -103,7 +115,19 @@ index 653de66..e305595 100644
      auto logLevel = static_cast<spdlog::level::level_enum>(CVarGetInteger("gDeveloperTools.LogLevel", defaultLogLevel));
      context->InitLogging(logLevel, logLevel);
      Ship::Context::GetRawInstance()->GetLogger()->set_pattern("[%H:%M:%S.%e] [%s:%#] [%^%l%$] %v");
-@@ -785,6 +827,9 @@ ImFont* OTRGlobals::CreateDefaultFontWithSize(float size) {
+@@ -758,6 +804,11 @@ void OTRGlobals::ScaleImGui() {
+     }
+ 
+     float scale = imguiScaleOptionToValue[imGuiScaleIndex];
++#ifdef __PROSPERO__
++    // Match the menu to the output resolution; 4K needs twice the 1080p UI size.
++    const float displayScale = std::clamp(Ship::Context::GetRawInstance()->GetWindow()->GetHeight() / 1080.0f, 1.0f, 2.0f);
++    scale *= displayScale;
++#endif
+     float newScale = scale / previousImGuiScale;
+     ImGui::GetStyle().ScaleAllSizes(newScale);
+     ImGui::GetIO().FontGlobalScale = scale;
+@@ -785,6 +836,9 @@ ImFont* OTRGlobals::CreateDefaultFontWithSize(float size) {
  }
  
  uint32_t OTRGlobals::GetInterpolationFPS() {
@@ -113,7 +137,7 @@ index 653de66..e305595 100644
      if (CVarGetInteger("gMatchRefreshRate", 0)) {
          return Ship::Context::GetRawInstance()->GetWindow()->GetCurrentRefreshRate();
      } else if (CVarGetInteger(CVAR_VSYNC_ENABLED, 1) ||
-@@ -793,6 +838,7 @@ uint32_t OTRGlobals::GetInterpolationFPS() {
+@@ -793,6 +847,7 @@ uint32_t OTRGlobals::GetInterpolationFPS() {
                                    CVarGetInteger("gInterpolationFPS", 20));
      }
      return CVarGetInteger("gInterpolationFPS", 20);
@@ -121,7 +145,7 @@ index 653de66..e305595 100644
  }
  
  extern "C" void OTRMessage_Init();
-@@ -1186,8 +1232,32 @@ void RunCommands(Gfx* Commands, int time, int step, int denom, int count) {
+@@ -1186,8 +1241,32 @@ void RunCommands(Gfx* Commands, int time, int step, int denom, int count) {
      UIWidgets::Colors themeColor =
          static_cast<UIWidgets::Colors>(CVarGetInteger("gSettings.Menu.Theme", UIWidgets::Colors::LightBlue));
      ImGui::PushStyleColor(ImGuiCol_TitleBgActive, UIWidgets::ColorValues.at(themeColor));
@@ -914,7 +938,7 @@ index 7c66e0d..9b40c05 100644
                                 G_TX_NOMIRROR | G_TX_WRAP, G_TX_NOMASK, G_TX_NOMASK, G_TX_NOLOD, G_TX_NOLOD);
  
 diff --git a/mm/2s2h/BenGui/BenMenu.cpp b/mm/2s2h/BenGui/BenMenu.cpp
-index f568c66..8100723 100644
+index f568c66..ee9373b 100644
 --- a/mm/2s2h/BenGui/BenMenu.cpp
 +++ b/mm/2s2h/BenGui/BenMenu.cpp
 @@ -362,6 +362,9 @@ void BenMenu::AddSettings() {
@@ -927,7 +951,19 @@ index f568c66..8100723 100644
      AddWidget(path, "Menu Theme", WIDGET_CVAR_COMBOBOX)
          .CVar("gSettings.Menu.Theme")
          .Options(ComboboxOptions()
-@@ -592,6 +595,9 @@ void BenMenu::AddSettings() {
+@@ -416,7 +419,11 @@ void BenMenu::AddSettings() {
+         })
+         .Options(ButtonOptions().Tooltip("Opens the folder that contains the save and mods folders, etc."));
+ 
++#ifdef __PROSPERO__
++    AddWidget(path, "Menu Size", WIDGET_CVAR_COMBOBOX)
++#else
+     AddWidget(path, "ImGui Menu Scaling", WIDGET_CVAR_COMBOBOX)
++#endif
+         .CVar("gSettings.ImGuiScale")
+         .Options(ComboboxOptions()
+                      .ComboMap(&imguiScaleOptions)
+@@ -592,6 +599,9 @@ void BenMenu::AddSettings() {
                  .DefaultValue(1));
  #endif
  
@@ -937,7 +973,7 @@ index f568c66..8100723 100644
      AddWidget(path, "Current FPS: %d", WIDGET_CVAR_SLIDER_INT)
          .CVar("gInterpolationFPS")
          .Callback([](WidgetInfo& info) {
-@@ -614,6 +620,7 @@ void BenMenu::AddSettings() {
+@@ -614,6 +624,7 @@ void BenMenu::AddSettings() {
      AddWidget(path, "Match Refresh Rate", WIDGET_CVAR_CHECKBOX)
          .CVar("gMatchRefreshRate")
          .Options(CheckboxOptions().Tooltip("Matches interpolation value to the refresh rate of your display."));
@@ -945,3 +981,195 @@ index f568c66..8100723 100644
      AddWidget(path, "Renderer API (Needs reload)", WIDGET_VIDEO_BACKEND);
      AddWidget(path, "Enable Vsync", WIDGET_CVAR_CHECKBOX)
          .CVar(CVAR_VSYNC_ENABLED)
+diff --git a/mm/2s2h/BenPort.h b/mm/2s2h/BenPort.h
+index b6acbab..6393dae 100644
+--- a/mm/2s2h/BenPort.h
++++ b/mm/2s2h/BenPort.h
+@@ -35,7 +35,9 @@ struct ImFont;
+ const std::string customMessageTableID = "BaseGameOverrides";
+ const std::string appShortName = "2ship";
+ 
+-#ifdef __WIIU__
++#if defined(__PROSPERO__)
++const uint32_t defaultImGuiScale = 2; // Large: 3x native pixels at 4K.
++#elif defined(__WIIU__)
+ const uint32_t defaultImGuiScale = 3;
+ #else
+ const uint32_t defaultImGuiScale = 1;
+diff --git a/mm/2s2h/BenGui/Menu.cpp b/mm/2s2h/BenGui/Menu.cpp
+index bdd501c..68e25c7 100644
+--- a/mm/2s2h/BenGui/Menu.cpp
++++ b/mm/2s2h/BenGui/Menu.cpp
+@@ -138,6 +138,31 @@ void Menu::UpdateElement() {
+     menuThemeIndex = static_cast<UIWidgets::Colors>(CVarGetInteger("gSettings.Menu.Theme", defaultThemeIndex));
+ }
+ 
++// Treat layout panels as one controller navigation area on PS5.
++static bool BeginMenuChild(const char* id, const ImVec2& size = ImVec2(0, 0),
++                           ImGuiChildFlags childFlags = ImGuiChildFlags_None,
++                           ImGuiWindowFlags windowFlags = ImGuiWindowFlags_None) {
++#ifdef __PROSPERO__
++    childFlags |= ImGuiChildFlags_NavFlattened;
++#endif
++    return ImGui::BeginChild(id, size, childFlags, windowFlags);
++}
++
++#ifdef __PROSPERO__
++// Shoulder shortcuts work across the menu without requiring a mouse or header focus.
++static bool CyclePS5MenuSelection(const std::vector<std::string>& choices, std::string& selection,
++                                  ImGuiKey previous, ImGuiKey next) {
++    if (choices.empty() || !CVarGetInteger(CVAR_IMGUI_CONTROLLER_NAV, 0) || ImGui::IsAnyItemActive() ||
++        ImGui::IsPopupOpen(nullptr, ImGuiPopupFlags_AnyPopupId | ImGuiPopupFlags_AnyPopupLevel)) return false;
++    const int direction = int(ImGui::IsKeyPressed(next, false)) - int(ImGui::IsKeyPressed(previous, false));
++    if (!direction) return false;
++    auto found = std::find(choices.begin(), choices.end(), selection);
++    const int index = found == choices.end() ? 0 : int(found - choices.begin());
++    selection = choices[(index + direction + int(choices.size())) % choices.size()];
++    return true;
++}
++#endif
++
+ bool ModernMenuSidebarEntry(std::string label) {
+     ImGuiContext& g = *GImGui;
+     ImGuiWindow* window = g.CurrentWindow;
+@@ -161,6 +186,9 @@ bool ModernMenuSidebarEntry(std::string label) {
+                                                                          : ImGuiCol_Button),
+                                     3.0f);
+     UIWidgets::RenderText(pos, label.c_str(), ImGui::FindRenderedTextEnd(label.c_str()), true);
++#ifdef __PROSPERO__
++    ImGui::RenderNavCursor(bb, sidebarId);
++#endif
+     return pressed;
+ }
+ 
+@@ -183,12 +211,15 @@ bool ModernMenuHeaderEntry(std::string label) {
+                                     3.0f);
+     pos += style.FramePadding;
+     UIWidgets::RenderText(pos, label.c_str(), ImGui::FindRenderedTextEnd(label.c_str()), true);
++#ifdef __PROSPERO__
++    ImGui::RenderNavCursor(bb, headerId);
++#endif
+     return pressed;
+ }
+ 
+ uint32_t Menu::DrawSearchResults(std::string& menuSearchText) {
+     auto menuThemeIndex = static_cast<UIWidgets::Colors>(CVarGetInteger("gSettings.Menu.Theme", defaultThemeIndex));
+-    ImGui::BeginChild("Search Results");
++    BeginMenuChild("Search Results");
+     int searchCount = 0;
+     for (auto& menuLabel : menuOrder) {
+         auto& menuEntry = menuEntries.at(menuLabel);
+@@ -608,6 +639,15 @@ void Menu::DrawElement() {
+     ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(10.0f, 8.0f));
+     const char* headerCvar = "gSettings.Menu.ActiveHeader";
+     std::string headerIndex = CVarGetString(headerCvar, "Settings");
++#ifdef __PROSPERO__
++    bool ps5HeaderChanged = ImGui::IsWindowAppearing();
++    if (CyclePS5MenuSelection(menuOrder, headerIndex, ImGuiKey_GamepadL1, ImGuiKey_GamepadR1)) {
++        ps5HeaderChanged = true;
++        menuSearch.Clear();
++        CVarSetString(headerCvar, headerIndex.c_str());
++        CVarSave();
++    }
++#endif
+     if (GetVectorIndexOf(menuOrder, headerIndex) == menuOrder.size()) {
+         headerIndex = menuOrder.at(0);
+     }
+@@ -639,13 +679,19 @@ void Menu::DrawElement() {
+     }
+     pos += window->WorkRect.GetSize() / 2 - menuSize / 2;
+     ImGui::SetNextWindowPos(pos);
+-    ImGui::BeginChild("Menu Block", menuSize,
++    BeginMenuChild("Menu Block", menuSize,
+                       ImGuiChildFlags_AutoResizeX | ImGuiChildFlags_AutoResizeY | ImGuiChildFlags_AlwaysAutoResize,
+                       ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoScrollbar);
+ 
+     std::unordered_map<std::string, SidebarEntry>* sidebar;
+     float headerHeight = headerSizes.at(0).y + style.FramePadding.y * 2;
+     ImVec2 buttonSize = ImGui::CalcTextSize(ICON_FA_TIMES_CIRCLE) + style.FramePadding * 2;
++#ifdef __PROSPERO__
++    // Reserve the complete header height once; a scaled horizontal scrollbar
++    // previously overlapped the section below it.
++    headerHeight += style.WindowPadding.y * 2;
++    ImVec2 headerSelSize = { menuSize.x - buttonSize.x * 3 - style.ItemSpacing.x * 3, headerHeight };
++#else
+     bool scrollbar = false;
+     if (headerWidth > menuSize.x - buttonSize.x * 3 - style.ItemSpacing.x * 3) {
+         headerHeight += style.ScrollbarSize;
+@@ -657,10 +703,16 @@ void Menu::DrawElement() {
+     if (scrollbar) {
+         headerSelSize.y += style.ScrollbarSize;
+     }
++#endif
+     bool autoFocus = CVarGetInteger("gSettings.Menu.SearchAutofocus", 0);
+-    ImGui::BeginChild("Header Selection", headerSelSize,
++    BeginMenuChild("Header Selection", headerSelSize,
++#ifdef __PROSPERO__
++                      ImGuiChildFlags_None,
++                      ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_HorizontalScrollbar);
++#else
+                       ImGuiChildFlags_AutoResizeX | ImGuiChildFlags_AutoResizeY | ImGuiChildFlags_AlwaysAutoResize,
+                       ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_HorizontalScrollbar);
++#endif
+     uint8_t curIndex = 0;
+     for (auto& label : menuOrder) {
+         if (curIndex != 0) {
+@@ -685,6 +737,10 @@ void Menu::DrawElement() {
+         }
+         UIWidgets::PopStyleButton();
+         if (headerIndex == label) {
++#ifdef __PROSPERO__
++            if (ps5HeaderChanged) ImGui::SetScrollHereX(0.5f);
++            if (ImGui::IsWindowAppearing()) ImGui::SetItemDefaultFocus();
++#endif
+             sidebar = &entry.sidebars;
+         }
+         if (nextIndex != label) {
+@@ -776,6 +832,9 @@ void Menu::DrawElement() {
+     float columnHeight = sectionHeight - style.ItemSpacing.y * 4;
+     ImGui::SetNextWindowPos(pos + style.ItemSpacing * 2);
+     float sidebarWidth = 200 - style.ItemSpacing.x;
++#ifdef __PROSPERO__
++    if (menuSize.x > 1600) sidebarWidth = menuSize.x * 0.15f;
++#endif
+ 
+     const char* sidebarCvar = menuEntries.at(headerIndex).sidebarCvar;
+ 
+@@ -784,10 +843,18 @@ void Menu::DrawElement() {
+         menuEntries[headerIndex].sidebarOrder.size()) {
+         sectionIndex = menuEntries[headerIndex].sidebarOrder.at(0);
+     }
++#ifdef __PROSPERO__
++    if (CyclePS5MenuSelection(menuEntries.at(headerIndex).sidebarOrder, sectionIndex,
++                              ImGuiKey_GamepadL2, ImGuiKey_GamepadR2)) {
++        menuSearch.Clear();
++        CVarSetString(sidebarCvar, sectionIndex.c_str());
++        CVarSave();
++    }
++#endif
+     float sectionCenterX = pos.x + (sidebarWidth / 2);
+     float topY = pos.y;
+     ImGui::SetNextWindowSizeConstraints({ sidebarWidth, 0 }, { sidebarWidth, columnHeight });
+-    ImGui::BeginChild((menuEntries.at(headerIndex).label + " Section").c_str(), { sidebarWidth, columnHeight * 3 },
++    BeginMenuChild((menuEntries.at(headerIndex).label + " Section").c_str(), { sidebarWidth, columnHeight * 3 },
+                       ImGuiChildFlags_AutoResizeY | ImGuiChildFlags_AlwaysAutoResize, ImGuiWindowFlags_NoTitleBar);
+     for (auto& sidebarLabel : menuEntries.at(headerIndex).sidebarOrder) {
+         std::string nextIndex = "";
+@@ -831,7 +898,7 @@ void Menu::DrawElement() {
+     if (!useColumns || (headerSearch && menuSearchText.length() > 0)) {
+         ImGui::SameLine();
+         ImGui::SetNextWindowSizeConstraints({ sectionWidth, 0 }, { sectionWidth, columnHeight });
+-        ImGui::BeginChild(sectionMenuId.c_str(), { sectionWidth, windowHeight * 4 }, ImGuiChildFlags_AutoResizeY,
++        BeginMenuChild(sectionMenuId.c_str(), { sectionWidth, windowHeight * 4 }, ImGuiChildFlags_AutoResizeY,
+                           ImGuiWindowFlags_NoTitleBar);
+     }
+     if (headerSearch && menuSearchText.length() > 0) {
+@@ -863,7 +930,7 @@ void Menu::DrawElement() {
+             std::string sectionId = fmt::format("{} Column {}", sectionMenuId, i);
+             if (useColumns) {
+                 ImGui::SetNextWindowSizeConstraints({ columnWidth, 0 }, { columnWidth, columnHeight });
+-                ImGui::BeginChild(sectionId.c_str(), { columnWidth, windowHeight * 4 }, ImGuiChildFlags_AutoResizeY,
++                BeginMenuChild(sectionId.c_str(), { columnWidth, windowHeight * 4 }, ImGuiChildFlags_AutoResizeY,
+                                   ImGuiWindowFlags_NoTitleBar);
+             }
+             // for (auto& entryName : sidebar->at(sectionIndex).sidebarOrder) {

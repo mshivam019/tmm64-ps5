@@ -69,6 +69,8 @@ The final label fix supports the original OOT Save lettering, including the matc
 
 ## Settings and language changes
 
+New source builds scale the port menu for TV resolution and default to Large; adjust **Settings → General → Menu Size**.
+
 Press **touchpad** for the port menu; **Options** remains the game pause/save menu. New source builds show the active config folder and fix interpolation at 60 FPS. Existing v1.0.0 binaries predate the touchpad change. See [settings, language and optional right-stick camera controls](docs/SETTINGS.md).
 
 2Ship 5.0.1 uses supported US assets and English text. German and Spanish are not selectable in this port. SoH’s language settings do not apply to Majora’s Mask.
