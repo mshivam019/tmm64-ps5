@@ -14,7 +14,7 @@ def main():
     p = argparse.ArgumentParser(description=__doc__)
     p.add_argument('--from-dir', required=True, type=Path)
     p.add_argument('--version', default='v1.0.0')
-    p.add_argument('--variant', choices=('stock', 'camera-controls'), default='stock')
+    p.add_argument('--variant', choices=('stock', 'camera-controls'), default='camera-controls')
     p.add_argument('--out', type=Path)
     a = p.parse_args()
     if not a.version or any(c not in 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789.-_' for c in a.version):

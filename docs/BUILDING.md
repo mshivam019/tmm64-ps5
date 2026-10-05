@@ -36,17 +36,17 @@ python3 tools/test-hud-defaults.py "$MM_SOURCE"
 
 Package an existing native title without redistributing private game data:
 ```sh
-python3 tools/release.py --from-dir /path/to/dist/PPSA99621 --version v1.1.0 --variant stock
+python3 tools/release.py --from-dir /path/to/dist/PPSA99621 --version v1.1.0 --variant camera-controls
 ```
 
-Use `--variant camera-controls` for the camera build; the recorded source variant must match. This produces matching Windows/Linux archives and SHA-256 files under `dist/releases/`. It includes only an explicit list of runtime files, support assets and documentation; `mm.o2r`, mods, saves and logs are excluded.
+New builds use the default `camera-controls` feature profile; users switch camera mode off in the Mod Menu. The recorded source variant must match. This produces matching Windows/Linux archives and SHA-256 files under `dist/releases/`. It includes only an explicit list of runtime files, support assets and documentation; `mm.o2r`, mods, saves and logs are excluded.
 
 The validator checks native executable/runtime signatures and minimum sizes, support-file presence, ZIP/O2R integrity, title metadata, display-profile consistency, optional executable checksums, and unwanted packaging leftovers. Normal mode requires your `mm.o2r`; `--release` requires it to be absent. JSON output is a single object, with exit status 1 on failure. These structural checks cannot establish gameplay stability or frame rate. Release packaging runs the validator automatically before creating each ZIP.
 
 ## Controller variants and executable updates
 
-Stock controls are the default. Fetch with `tools/fetch-mm.sh --camera-controls`, or set `MM_CAMERA_CONTROLS=1` for `tools/build.sh`, to select native FreeLook on right stick and C buttons on D-pad. Set `MM_CAMERA_CONTROLS=0` to return the source to stock. Without an explicit build override the fetched selection is retained. See [SETTINGS.md](SETTINGS.md) for saved mapping behavior.
+All new builds include camera controls and default to enabled, with HD textures / mods also enabled. Users can disable either independently in the Mod Menu, and saved choices persist. No optional patch or environment flag is needed. See [SETTINGS.md](SETTINGS.md) for binding restoration and menu navigation.
 
-To package an executable update without copying game archives, use `python3 tools/pack-mm.py --without-game-assets --out /path/to/update`. Check its PPSA99621 folder with `bash tools/check-build.sh --update --variant stock --dir /path/to/update/dist/PPSA99621` (use `camera-controls` for that variant). This mode requires the recorded executable checksum and `game_assets_included=false`; normal validation still requires a complete installation.
+To package an executable update without copying game archives, use `python3 tools/pack-mm.py --without-game-assets --out /path/to/update`. Check its PPSA99621 folder with `bash tools/check-build.sh --update --variant camera-controls --dir /path/to/update/dist/PPSA99621`. This mode requires the recorded executable checksum and `game_assets_included=false`; normal validation still requires a complete installation.
 
 Close the console title, keep rollback copies, and transfer the new `eboot.bin`, matching `sce_module/libc.prx` and `build-profile.json`. Preserve installed assets, title metadata, mods, UserData and saves. Compilation and archive checks are not console gameplay proof.

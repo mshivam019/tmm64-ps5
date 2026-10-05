@@ -30,17 +30,18 @@ index a9378e8..612df1f 100644
  if(CMAKE_SYSTEM_NAME MATCHES "Linux")
  file(COPY ${CMAKE_SOURCE_DIR}/mm/linux/2s2hIcon.png DESTINATION ${CMAKE_CURRENT_BINARY_DIR})
 diff --git a/mm/2s2h/BenPort.cpp b/mm/2s2h/BenPort.cpp
-index 653de66..9522e66 100644
+index 653de66..52ea12f 100644
 --- a/mm/2s2h/BenPort.cpp
 +++ b/mm/2s2h/BenPort.cpp
-@@ -1,3 +1,6 @@
+@@ -1,3 +1,7 @@
 +#ifdef __PROSPERO__
 +#include "PS5FramePacer.h"
++#include "Enhancements/Camera/PS5CameraProfile.h"
 +#endif
  #include "BenPort.h"
  #include <iostream>
  #include <algorithm>
-@@ -195,7 +198,11 @@ OTRGlobals::OTRGlobals() {
+@@ -195,7 +199,11 @@ OTRGlobals::OTRGlobals() {
      }
  
      previousImGuiScaleIndex = -1;
@@ -52,7 +53,7 @@ index 653de66..9522e66 100644
      ScaleImGui();
  }
  
-@@ -312,7 +319,12 @@ void OTRGlobals::RunExtract(int argc, char* argv[]) {
+@@ -312,7 +320,12 @@ void OTRGlobals::RunExtract(int argc, char* argv[]) {
      OSFatal();
  #endif
  
@@ -65,7 +66,7 @@ index 653de66..9522e66 100644
          BenGui::RegisterPopup("Extractor assets not found",
                                "No O2R files found. Missing 'assets/' folder needed to generate OTR file.\nPlease "
                                "re-extract them from the download or.\n\nExiting...",
-@@ -346,7 +358,7 @@ void OTRGlobals::RunExtract(int argc, char* argv[]) {
+@@ -346,7 +359,7 @@ void OTRGlobals::RunExtract(int argc, char* argv[]) {
                  if (shipArchiveVersionMatch) {
  #ifdef _WIN32
                      extractStep = ES_WINDOWS;
@@ -74,7 +75,7 @@ index 653de66..9522e66 100644
                      extractStep = ES_VERIFY;
  #else
                      extractStep = args.empty() ? ES_EXTRACT : ES_EXTRACT_ARGS;
-@@ -624,6 +636,40 @@ void OTRGlobals::Initialize() {
+@@ -624,6 +637,40 @@ void OTRGlobals::Initialize() {
  #endif
      context->InitConfiguration();
      context->InitConsoleVariables();
@@ -115,7 +116,7 @@ index 653de66..9522e66 100644
      auto logLevel = static_cast<spdlog::level::level_enum>(CVarGetInteger("gDeveloperTools.LogLevel", defaultLogLevel));
      context->InitLogging(logLevel, logLevel);
      Ship::Context::GetRawInstance()->GetLogger()->set_pattern("[%H:%M:%S.%e] [%s:%#] [%^%l%$] %v");
-@@ -758,6 +804,11 @@ void OTRGlobals::ScaleImGui() {
+@@ -758,6 +805,11 @@ void OTRGlobals::ScaleImGui() {
      }
  
      float scale = imguiScaleOptionToValue[imGuiScaleIndex];
@@ -127,7 +128,7 @@ index 653de66..9522e66 100644
      float newScale = scale / previousImGuiScale;
      ImGui::GetStyle().ScaleAllSizes(newScale);
      ImGui::GetIO().FontGlobalScale = scale;
-@@ -785,6 +836,9 @@ ImFont* OTRGlobals::CreateDefaultFontWithSize(float size) {
+@@ -785,6 +837,9 @@ ImFont* OTRGlobals::CreateDefaultFontWithSize(float size) {
  }
  
  uint32_t OTRGlobals::GetInterpolationFPS() {
@@ -137,7 +138,7 @@ index 653de66..9522e66 100644
      if (CVarGetInteger("gMatchRefreshRate", 0)) {
          return Ship::Context::GetRawInstance()->GetWindow()->GetCurrentRefreshRate();
      } else if (CVarGetInteger(CVAR_VSYNC_ENABLED, 1) ||
-@@ -793,6 +847,7 @@ uint32_t OTRGlobals::GetInterpolationFPS() {
+@@ -793,6 +848,7 @@ uint32_t OTRGlobals::GetInterpolationFPS() {
                                    CVarGetInteger("gInterpolationFPS", 20));
      }
      return CVarGetInteger("gInterpolationFPS", 20);
@@ -145,7 +146,17 @@ index 653de66..9522e66 100644
  }
  
  extern "C" void OTRMessage_Init();
-@@ -1186,8 +1241,32 @@ void RunCommands(Gfx* Commands, int time, int step, int denom, int count) {
+@@ -1078,6 +1134,9 @@ extern "C" uint64_t GetUnixTimestamp() {
+ }
+ 
+ extern "C" void Graph_StartFrame() {
++#ifdef __PROSPERO__
++    ApplyPS5CameraProfile();
++#endif
+ #ifndef __WIIU__
+     using Ship::KbScancode;
+     int32_t dwScancode = OTRGlobals::Instance->context->GetWindow()->GetLastScancode();
+@@ -1186,8 +1245,32 @@ void RunCommands(Gfx* Commands, int time, int step, int denom, int count) {
      UIWidgets::Colors themeColor =
          static_cast<UIWidgets::Colors>(CVarGetInteger("gSettings.Menu.Theme", UIWidgets::Colors::LightBlue));
      ImGui::PushStyleColor(ImGuiCol_TitleBgActive, UIWidgets::ColorValues.at(themeColor));
@@ -200,7 +211,7 @@ index 7bbf2d3..4b8857f 100644
      struct {
          MtxF src;
 diff --git a/mm/2s2h/Enhancements/ModMenu/ModMenu.cpp b/mm/2s2h/Enhancements/ModMenu/ModMenu.cpp
-index 84f18f0..87067ff 100644
+index 84f18f0..a7a9297 100644
 --- a/mm/2s2h/Enhancements/ModMenu/ModMenu.cpp
 +++ b/mm/2s2h/Enhancements/ModMenu/ModMenu.cpp
 @@ -1,5 +1,8 @@
@@ -212,7 +223,17 @@ index 84f18f0..87067ff 100644
  
  #include <libultraship/classes.h>
  #include <ship/utils/StringHelper.h>
-@@ -125,6 +128,7 @@ bool IsValidExtension(std::string extension) {
+@@ -23,6 +26,9 @@ extern std::shared_ptr<BenMenu> mBenMenu;
+ }
+ 
+ static WidgetInfo enableModsWidget;
++#ifdef __PROSPERO__
++static WidgetInfo cameraControlsWidget;
++#endif
+ static WidgetInfo tabHotkeyWidget;
+ 
+ #define CVAR_ENABLED_MODS_NAME "gSettings.EnabledMods"
+@@ -125,6 +131,7 @@ bool IsValidExtension(std::string extension) {
  static bool archivesAdded = false;
  
  void UpdateModFiles(bool init = false, bool reset = false) {
@@ -220,7 +241,7 @@ index 84f18f0..87067ff 100644
      if (init || reset) {
          enabledModFiles.clear();
          enabledModFiles = GetEnabledModsFromCVar();
-@@ -133,13 +137,59 @@ void UpdateModFiles(bool init = false, bool reset = false) {
+@@ -133,13 +140,59 @@ void UpdateModFiles(bool init = false, bool reset = false) {
      unsupportedFiles.clear();
      filePaths.clear();
      bool changed = false;
@@ -280,7 +301,7 @@ index 84f18f0..87067ff 100644
                  if (p.is_directory()) {
                      continue;
                  }
-@@ -149,6 +199,10 @@ void UpdateModFiles(bool init = false, bool reset = false) {
+@@ -149,6 +202,10 @@ void UpdateModFiles(bool init = false, bool reset = false) {
                  if (!IsValidExtension(extension)) {
                      continue;
                  }
@@ -291,7 +312,7 @@ index 84f18f0..87067ff 100644
                  bool enabled =
                      std::find(enabledModFiles.begin(), enabledModFiles.end(), filename) != enabledModFiles.end();
                  if (!enabled) {
-@@ -180,6 +234,13 @@ void UpdateModFiles(bool init = false, bool reset = false) {
+@@ -180,6 +237,13 @@ void UpdateModFiles(bool init = false, bool reset = false) {
              SetEnabledModsCVarValue();
          }
      }
@@ -305,10 +326,27 @@ index 84f18f0..87067ff 100644
  }
  
  extern "C" void gfx_texture_cache_clear();
-@@ -380,7 +441,11 @@ void ModMenuWindow::InitElement() {
+@@ -284,6 +348,9 @@ void DrawMods(bool enabled) {
+ bool editing = false;
+ 
+ void ModMenuWindow::DrawElement() {
++#ifdef __PROSPERO__
++    BenGui::mBenMenu->MenuDrawItem(cameraControlsWidget, 200, THEME_COLOR);
++#endif
+     BenGui::mBenMenu->MenuDrawItem(enableModsWidget, 200, THEME_COLOR);
+     ImGui::SameLine();
+     BenGui::mBenMenu->MenuDrawItem(tabHotkeyWidget, 200, THEME_COLOR);
+@@ -380,12 +447,29 @@ void ModMenuWindow::InitElement() {
  }
  
  void RegisterModMenuWidgets() {
++#ifdef __PROSPERO__
++    cameraControlsWidget = { .name = "Right-stick camera controls", .type = WidgetType::WIDGET_CVAR_CHECKBOX };
++    cameraControlsWidget.CVar("gSettings.PS5CameraControls")
++        .Options(UIWidgets::CheckboxOptions().Color(THEME_COLOR).DefaultValue(true)
++            .Tooltip("Right stick moves the camera; D-pad uses C buttons. Turn off to restore prior bindings."));
++    BenGui::mBenMenu->AddSearchWidget({ cameraControlsWidget, "Settings", "Mod Menu", "Top", "camera controls" });
++#endif
 +#ifdef __PROSPERO__
 +    enableModsWidget = { .name = "Enable HD textures / mods", .type = WidgetType::WIDGET_CVAR_CHECKBOX };
 +#else
@@ -317,6 +355,18 @@ index 84f18f0..87067ff 100644
      enableModsWidget.CVar("gEnhancements.Mods.AlternateAssets")
          .Options(UIWidgets::CheckboxOptions({ { .disabledTooltip = "Temporarily disabled while editing mods list." } })
                       .Color(THEME_COLOR)
+                      .Tooltip("Toggle mods. For graphics mods, this means toggling between default and mod graphics.")
+-                     .DefaultValue(false))
++                     .DefaultValue(
++#ifdef __PROSPERO__
++                         true
++#else
++                         false
++#endif
++                     ))
+         .PreFunc([](WidgetInfo& info) {
+             auto options = std::static_pointer_cast<UIWidgets::CheckboxOptions>(info.options);
+             options->disabled = editing;
 diff --git a/mm/2s2h/Enhancements/Saving/PauseSaveLabel.h b/mm/2s2h/Enhancements/Saving/PauseSaveLabel.h
 new file mode 100644
 index 0000000..ac12105
@@ -997,10 +1047,10 @@ index b6acbab..6393dae 100644
  #else
  const uint32_t defaultImGuiScale = 1;
 diff --git a/mm/2s2h/BenGui/Menu.cpp b/mm/2s2h/BenGui/Menu.cpp
-index bdd501c..68e25c7 100644
+index bdd501c..a40f5ed 100644
 --- a/mm/2s2h/BenGui/Menu.cpp
 +++ b/mm/2s2h/BenGui/Menu.cpp
-@@ -138,6 +138,31 @@ void Menu::UpdateElement() {
+@@ -138,6 +138,33 @@ void Menu::UpdateElement() {
      menuThemeIndex = static_cast<UIWidgets::Colors>(CVarGetInteger("gSettings.Menu.Theme", defaultThemeIndex));
  }
  
@@ -1015,6 +1065,8 @@ index bdd501c..68e25c7 100644
 +}
 +
 +#ifdef __PROSPERO__
++static bool ps5FocusSection = false;
++
 +// Shoulder shortcuts work across the menu without requiring a mouse or header focus.
 +static bool CyclePS5MenuSelection(const std::vector<std::string>& choices, std::string& selection,
 +                                  ImGuiKey previous, ImGuiKey next) {
@@ -1032,7 +1084,18 @@ index bdd501c..68e25c7 100644
  bool ModernMenuSidebarEntry(std::string label) {
      ImGuiContext& g = *GImGui;
      ImGuiWindow* window = g.CurrentWindow;
-@@ -161,6 +186,9 @@ bool ModernMenuSidebarEntry(std::string label) {
+@@ -152,6 +179,10 @@ bool ModernMenuSidebarEntry(std::string label) {
+     ImGui::ItemAdd(bb, sidebarId);
+     bool hovered, held;
+     bool pressed = ImGui::ButtonBehavior(bb, sidebarId, &hovered, &held);
++#ifdef __PROSPERO__
++    // Cross or Right on a section enters its first available setting.
++    pressed |= g.NavId == sidebarId && ImGui::IsKeyPressed(ImGuiKey_GamepadDpadRight, false);
++#endif
+     if (pressed) {
+         ImGui::MarkItemEdited(sidebarId);
+     }
+@@ -161,6 +192,9 @@ bool ModernMenuSidebarEntry(std::string label) {
                                                                           : ImGuiCol_Button),
                                      3.0f);
      UIWidgets::RenderText(pos, label.c_str(), ImGui::FindRenderedTextEnd(label.c_str()), true);
@@ -1042,7 +1105,7 @@ index bdd501c..68e25c7 100644
      return pressed;
  }
  
-@@ -183,12 +211,15 @@ bool ModernMenuHeaderEntry(std::string label) {
+@@ -183,12 +217,15 @@ bool ModernMenuHeaderEntry(std::string label) {
                                      3.0f);
      pos += style.FramePadding;
      UIWidgets::RenderText(pos, label.c_str(), ImGui::FindRenderedTextEnd(label.c_str()), true);
@@ -1059,12 +1122,29 @@ index bdd501c..68e25c7 100644
      int searchCount = 0;
      for (auto& menuLabel : menuOrder) {
          auto& menuEntry = menuEntries.at(menuLabel);
-@@ -608,6 +639,15 @@ void Menu::DrawElement() {
+@@ -277,6 +314,15 @@ void Menu::MenuDrawItem(WidgetInfo& widget, uint32_t width, UIWidgets::Colors me
+         ImGui::SameLine();
+     }
+ 
++#ifdef __PROSPERO__
++    if (ps5FocusSection && !widget.isHidden && (!widget.options || !widget.options->disabled) &&
++        widget.type != WIDGET_SEPARATOR && widget.type != WIDGET_SEPARATOR_TEXT &&
++        widget.type != WIDGET_TEXT && widget.type != WIDGET_SEARCH && widget.type != WIDGET_CUSTOM) {
++        ImGui::FocusWindow(ImGui::GetCurrentWindow());
++        ImGui::NavInitWindow(ImGui::GetCurrentWindow(), true);
++        ps5FocusSection = false;
++    }
++#endif
+     try {
+         switch (widget.type) {
+             case WIDGET_CHECKBOX: {
+@@ -608,6 +654,16 @@ void Menu::DrawElement() {
      ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(10.0f, 8.0f));
      const char* headerCvar = "gSettings.Menu.ActiveHeader";
      std::string headerIndex = CVarGetString(headerCvar, "Settings");
 +#ifdef __PROSPERO__
 +    bool ps5HeaderChanged = ImGui::IsWindowAppearing();
++    if (ps5HeaderChanged) ImGui::SetNavCursorVisible(true);
 +    if (CyclePS5MenuSelection(menuOrder, headerIndex, ImGuiKey_GamepadL1, ImGuiKey_GamepadR1)) {
 +        ps5HeaderChanged = true;
 +        menuSearch.Clear();
@@ -1075,7 +1155,7 @@ index bdd501c..68e25c7 100644
      if (GetVectorIndexOf(menuOrder, headerIndex) == menuOrder.size()) {
          headerIndex = menuOrder.at(0);
      }
-@@ -639,13 +679,19 @@ void Menu::DrawElement() {
+@@ -639,13 +695,19 @@ void Menu::DrawElement() {
      }
      pos += window->WorkRect.GetSize() / 2 - menuSize / 2;
      ImGui::SetNextWindowPos(pos);
@@ -1096,7 +1176,7 @@ index bdd501c..68e25c7 100644
      bool scrollbar = false;
      if (headerWidth > menuSize.x - buttonSize.x * 3 - style.ItemSpacing.x * 3) {
          headerHeight += style.ScrollbarSize;
-@@ -657,10 +703,16 @@ void Menu::DrawElement() {
+@@ -657,10 +719,16 @@ void Menu::DrawElement() {
      if (scrollbar) {
          headerSelSize.y += style.ScrollbarSize;
      }
@@ -1114,7 +1194,7 @@ index bdd501c..68e25c7 100644
      uint8_t curIndex = 0;
      for (auto& label : menuOrder) {
          if (curIndex != 0) {
-@@ -685,6 +737,10 @@ void Menu::DrawElement() {
+@@ -685,6 +753,10 @@ void Menu::DrawElement() {
          }
          UIWidgets::PopStyleButton();
          if (headerIndex == label) {
@@ -1125,7 +1205,20 @@ index bdd501c..68e25c7 100644
              sidebar = &entry.sidebars;
          }
          if (nextIndex != label) {
-@@ -776,6 +832,9 @@ void Menu::DrawElement() {
+@@ -718,6 +790,12 @@ void Menu::DrawElement() {
+     options.color = UIWidgets::Colors::Red;
+     options.size = UIWidgets::Sizes::Inline;
+     options.tooltip = "Quit 2S2H";
++#ifdef __PROSPERO__
++    if (ImGui::IsKeyPressed(ImGuiKey_GamepadFaceUp, false) && !ImGui::IsAnyItemActive() &&
++        !ImGui::IsPopupOpen(nullptr, ImGuiPopupFlags_AnyPopupId | ImGuiPopupFlags_AnyPopupLevel)) {
++        ImGui::SetKeyboardFocusHere();
++    }
++#endif
+     if (UIWidgets::Button(ICON_FA_POWER_OFF, options)) {
+         BenGui::mModalWindow->RegisterPopup(
+             "Quit 2S2H", "Are you sure you want to quit 2S2H?", "Quit", "Cancel",
+@@ -776,6 +854,9 @@ void Menu::DrawElement() {
      float columnHeight = sectionHeight - style.ItemSpacing.y * 4;
      ImGui::SetNextWindowPos(pos + style.ItemSpacing * 2);
      float sidebarWidth = 200 - style.ItemSpacing.x;
@@ -1135,7 +1228,7 @@ index bdd501c..68e25c7 100644
  
      const char* sidebarCvar = menuEntries.at(headerIndex).sidebarCvar;
  
-@@ -784,10 +843,18 @@ void Menu::DrawElement() {
+@@ -784,10 +865,18 @@ void Menu::DrawElement() {
          menuEntries[headerIndex].sidebarOrder.size()) {
          sectionIndex = menuEntries[headerIndex].sidebarOrder.at(0);
      }
@@ -1155,7 +1248,25 @@ index bdd501c..68e25c7 100644
                        ImGuiChildFlags_AutoResizeY | ImGuiChildFlags_AlwaysAutoResize, ImGuiWindowFlags_NoTitleBar);
      for (auto& sidebarLabel : menuEntries.at(headerIndex).sidebarOrder) {
          std::string nextIndex = "";
-@@ -831,7 +898,7 @@ void Menu::DrawElement() {
+@@ -795,7 +884,17 @@ void Menu::DrawElement() {
+         if (sectionIndex != sidebarLabel) {
+             ImGui::PushStyleColor(ImGuiCol_Button, { 0, 0, 0, 0 });
+         }
++#ifdef __PROSPERO__
++        if (sectionIndex == sidebarLabel && ImGui::IsKeyPressed(ImGuiKey_GamepadFaceRight, false) &&
++            !ImGui::IsAnyItemActive() &&
++            !ImGui::IsPopupOpen(nullptr, ImGuiPopupFlags_AnyPopupId | ImGuiPopupFlags_AnyPopupLevel)) {
++            ImGui::SetKeyboardFocusHere();
++        }
++#endif
+         if (ModernMenuSidebarEntry(sidebarLabel)) {
++#ifdef __PROSPERO__
++            ps5FocusSection = true;
++#endif
+             if (headerSearch) {
+                 menuSearch.Clear();
+             }
+@@ -831,7 +930,7 @@ void Menu::DrawElement() {
      if (!useColumns || (headerSearch && menuSearchText.length() > 0)) {
          ImGui::SameLine();
          ImGui::SetNextWindowSizeConstraints({ sectionWidth, 0 }, { sectionWidth, columnHeight });
@@ -1164,7 +1275,7 @@ index bdd501c..68e25c7 100644
                            ImGuiWindowFlags_NoTitleBar);
      }
      if (headerSearch && menuSearchText.length() > 0) {
-@@ -863,7 +930,7 @@ void Menu::DrawElement() {
+@@ -863,7 +962,7 @@ void Menu::DrawElement() {
              std::string sectionId = fmt::format("{} Column {}", sectionMenuId, i);
              if (useColumns) {
                  ImGui::SetNextWindowSizeConstraints({ columnWidth, 0 }, { columnWidth, columnHeight });
@@ -1173,3 +1284,158 @@ index bdd501c..68e25c7 100644
                                    ImGuiWindowFlags_NoTitleBar);
              }
              // for (auto& entryName : sidebar->at(sectionIndex).sidebarOrder) {
+@@ -885,6 +984,9 @@ void Menu::DrawElement() {
+     ImGui::PopFont();
+     ImGui::PopFont();
+ 
++#ifdef __PROSPERO__
++    ps5FocusSection = false; // A section with no enabled controls must not steal later focus.
++#endif
+     if (!popout) {
+         ImGui::PopStyleVar();
+     }
+diff --git a/mm/2s2h/Enhancements/Camera/PS5CameraProfile.h b/mm/2s2h/Enhancements/Camera/PS5CameraProfile.h
+new file mode 100644
+--- /dev/null
++++ b/mm/2s2h/Enhancements/Camera/PS5CameraProfile.h
+@@ -0,0 +1,140 @@
++#pragma once
++#include <stdexcept>
++#include <spdlog/spdlog.h>
++#include <libultraship/controller/controldeck/ControlDeck.h>
++#include <ship/Context.h>
++#include <ship/config/ConsoleVariable.h>
++#include <ship/config/Config.h>
++#include <ship/controller/controldevice/controller/Controller.h>
++#include <ship/controller/controldevice/controller/mapping/sdl/SDLButtonToButtonMapping.h>
++#include "2s2h/ShipInit.hpp"
++
++// Preserve port 0 only; other players' mappings can change while camera mode is on.
++inline nlohmann::json SnapshotPS5CameraBindings(const nlohmann::json& controllers) {
++    nlohmann::json snapshot = nlohmann::json::object();
++    for (const auto& [group, value] : controllers.items()) {
++        if (group == "Port1") snapshot[group] = value;
++        else if (value.is_object()) {
++            for (const auto& [id, mapping] : value.items()) {
++                if (id.rfind("P0", 0) == 0) snapshot[group][id] = mapping;
++            }
++        }
++    }
++    return snapshot;
++}
++
++inline nlohmann::json RestorePS5CameraBindings(nlohmann::json controllers, const nlohmann::json& snapshot) {
++    if (!snapshot.is_object() || !snapshot.contains("Port1") || !snapshot["Port1"].is_object()) {
++        throw std::runtime_error("Camera binding backup is missing Port1");
++    }
++    for (auto& [group, value] : controllers.items()) {
++        if (group != "Port1" && value.is_object()) {
++            for (auto it = value.begin(); it != value.end();) {
++                if (it.key().rfind("P0", 0) == 0) it = value.erase(it);
++                else ++it;
++            }
++        }
++    }
++    controllers["Port1"] = snapshot["Port1"];
++    for (const auto& [group, value] : snapshot.items()) {
++        if (group != "Port1") {
++            for (const auto& [id, mapping] : value.items()) controllers[group][id] = mapping;
++        }
++    }
++    return controllers;
++}
++
++inline void ApplyPS5CameraProfile() {
++    auto context = Ship::Context::GetRawInstance();
++    auto vars = context->GetConsoleVariables();
++    const bool wanted = vars->GetInteger("gSettings.PS5CameraControls", 1) != 0;
++    const bool applied = vars->GetInteger("gSettings.PS5CameraControlsApplied",
++        vars->GetInteger("gSettings.PS5CameraProfileVersion", 0) >= 1 ? 1 : 0) != 0;
++    if (wanted == applied) return;
++    auto controller = context->GetControlDeck()->GetControllerByPort(0);
++    if (controller->HasConfig()) controller->ReloadAllMappingsFromConfig();
++    else {
++        controller->AddDefaultMappings(Ship::PhysicalDeviceType::Keyboard);
++        controller->AddDefaultMappings(Ship::PhysicalDeviceType::Mouse);
++        controller->AddDefaultMappings(Ship::PhysicalDeviceType::SDLGamepad);
++    }
++    auto config = context->GetConfig();
++    vars->Save();
++    if (wanted) {
++        const auto controllers = config->GetNestedJson()["CVars"]["gSettings"]["Controllers"];
++        const std::string backup = SnapshotPS5CameraBindings(controllers).dump();
++        vars->SetString("gSettings.PS5CameraBindingsBackup", backup.c_str());
++        const struct {
++            CONTROLLERBUTTONS_T cButton;
++            CONTROLLERBUTTONS_T dButton;
++            SDL_GameControllerButton physical;
++        } directions[] = {
++            {BTN_CUP, BTN_DUP, SDL_CONTROLLER_BUTTON_DPAD_UP},
++            {BTN_CDOWN, BTN_DDOWN, SDL_CONTROLLER_BUTTON_DPAD_DOWN},
++            {BTN_CLEFT, BTN_DLEFT, SDL_CONTROLLER_BUTTON_DPAD_LEFT},
++            {BTN_CRIGHT, BTN_DRIGHT, SDL_CONTROLLER_BUTTON_DPAD_RIGHT},
++        };
++        for (const auto& direction : directions) {
++            auto button = controller->GetButton(direction.cButton);
++            for (const auto& [id, mapping] : button->GetAllButtonMappings()) {
++                // IDs are emitted by SDLAxisDirectionToButtonMapping. Preserve
++                // keyboard, mouse, face-button and trigger alternatives.
++                if (id.find("-SDLA2-AD") != std::string::npos ||
++                    id.find("-SDLA3-AD") != std::string::npos) {
++                    button->ClearButtonMapping(mapping);
++                }
++            }
++            auto mapping = std::make_shared<Ship::SDLButtonToButtonMapping>(0, direction.cButton, direction.physical);
++            button->AddButtonMapping(mapping);
++            mapping->SaveToConfig();
++            button->SaveButtonMappingIdsToConfig();
++    
++            auto dpad = controller->GetButton(direction.dButton);
++            const auto oldId = std::make_shared<Ship::SDLButtonToButtonMapping>(0, direction.dButton,
++                                                                            direction.physical)->GetButtonMappingId();
++            if (dpad->GetButtonMappingById(oldId)) dpad->ClearButtonMapping(oldId);
++        }
++        auto camera = controller->GetRightStick();
++        camera->ClearAllMappingsForDeviceType(Ship::PhysicalDeviceType::SDLGamepad);
++        camera->AddDefaultMappings(Ship::PhysicalDeviceType::SDLGamepad);
++    } else {
++        const std::string backup = vars->GetString("gSettings.PS5CameraBindingsBackup", "");
++        if (!backup.empty()) {
++            try {
++                const auto controllers = config->GetNestedJson()["CVars"]["gSettings"]["Controllers"];
++                config->SetBlock("CVars.gSettings.Controllers",
++                    RestorePS5CameraBindings(controllers, nlohmann::json::parse(backup)));
++                vars->Load();
++                controller->ReloadAllMappingsFromConfig();
++            } catch (const std::exception& error) {
++                SPDLOG_ERROR("Cannot restore camera bindings: {}", error.what());
++                vars->SetInteger("gSettings.PS5CameraControls", 1);
++                vars->Save();
++                return;
++            }
++        } else {
++            // Upgrade an older camera build that had no reversible binding snapshot.
++            const struct { CONTROLLERBUTTONS_T c, d; SDL_GameControllerButton physical; } directions[] = {
++                {BTN_CUP, BTN_DUP, SDL_CONTROLLER_BUTTON_DPAD_UP},
++                {BTN_CDOWN, BTN_DDOWN, SDL_CONTROLLER_BUTTON_DPAD_DOWN},
++                {BTN_CLEFT, BTN_DLEFT, SDL_CONTROLLER_BUTTON_DPAD_LEFT},
++                {BTN_CRIGHT, BTN_DRIGHT, SDL_CONTROLLER_BUTTON_DPAD_RIGHT},
++            };
++            for (const auto& direction : directions) {
++                auto cButton = controller->GetButton(direction.c);
++                auto id = std::make_shared<Ship::SDLButtonToButtonMapping>(0, direction.c,
++                    direction.physical)->GetButtonMappingId();
++                if (cButton->GetButtonMappingById(id)) cButton->ClearButtonMapping(id);
++                cButton->AddDefaultMappings(Ship::PhysicalDeviceType::SDLGamepad);
++                controller->GetButton(direction.d)->AddDefaultMappings(Ship::PhysicalDeviceType::SDLGamepad);
++            }
++            controller->GetRightStick()->ClearAllMappingsForDeviceType(Ship::PhysicalDeviceType::SDLGamepad);
++        }
++    }
++    vars->SetInteger("gSettings.PS5CameraControls", wanted);
++    vars->SetInteger("gSettings.PS5CameraControlsApplied", wanted);
++    vars->SetInteger("gSettings.PS5CameraProfileVersion", wanted ? 1 : 0);
++    vars->SetInteger("gEnhancements.Camera.FreeLook.Enable", wanted);
++    ShipInit::Init("gEnhancements.Camera.FreeLook.Enable");
++    vars->Save();
++}

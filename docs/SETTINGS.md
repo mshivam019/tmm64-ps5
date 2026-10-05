@@ -31,24 +31,13 @@ python3 tools/configure-settings.py /path/to/2ship2harkinian.json --hd-textures 
 
 The helper makes a backup and preserves unrelated settings/controller bindings. Windows users can use `py` instead of `python3`. It writes `CVars.gSettings.ControlNav=1`, `CVars.gInterpolationFPS=60`, `CVars.gMatchRefreshRate=0`, and `CVars.gEnhancements.Mods.AlternateAssets=1`. It does not install texture archives; follow [MODS.md](MODS.md).
 
-## Optional right-stick camera build
+## Camera controls and HD defaults
 
-The **stock** build keeps the original right-stick C buttons. The **camera-controls** build uses right stick for 2Ship's native FreeLook, and D-pad for C-Up/C-Down/C-Left/C-Right. Cross=A, Circle=B and Options=Start stay mapped. Touchpad opens the port menu in both builds.
+New PS5 source builds include both toggles, enabled by default. Open **Settings → Mod Menu** (in 2Ship, select **Popout Mod Menu Window**) and change **Right-stick camera controls** or **Enable HD textures / mods**. They work independently and saved off settings remain off after restarting. HD still requires the archive and `mods.txt`; see [MODS.md](MODS.md).
 
-The camera profile applies once on its first frame, retaining face-button, keyboard and other C-button alternatives. It removes the default D-pad N64 direction bindings to avoid duplicate actions. A marker `CVars.gSettings.PS5CameraProfileVersion=1` preserves subsequent user edits. FreeLook controls are under Enhancements → Camera and use `CVars.gEnhancements.Camera.FreeLook.Enable`.
+Camera mode uses right stick for Free Look and D-pad for C buttons. Cross=A, Circle=B and Options=Start retain their bindings. Turning camera mode off restores the controller bindings saved when it was enabled. Changes to other controller ports are preserved. An older camera build without that backup falls back to the standard right-stick C buttons and D-pad directions; keep a config backup if you previously customized those mappings.
 
-Both variants use title ID PPSA99621 and share saves/configuration. **Switching back to stock does not reset the saved camera mappings.** Back up your config first; restore that backup or edit the controller mappings and disable FreeLook in the menu when reverting. Remove the profile marker only if you deliberately want the camera build to reapply its defaults.
-
-Build selection:
-
-```sh
-bash tools/fetch-mm.sh --camera-controls
-MM_CAMERA_CONTROLS=1 bash tools/build.sh
-# Stock source/build selection:
-MM_CAMERA_CONTROLS=0 bash tools/build.sh
-```
-
-With no build override, the fetch selection is retained. The camera build remains an untested console candidate until right-stick movement, C-button actions, menus and saving are checked on hardware.
+Every normal source build includes this feature; no camera patch or build environment flag is needed. `CVars.gSettings.PS5CameraControls` is `1` for on and `0` for off. For a downloaded active config, use `tools/configure-settings.py` with `--camera-controls on` or `off`. Close the title before editing it. The helper also accepts `--hd-textures on` or `off` and preserves unrelated settings.
 
 ## Menu size on a TV
 
@@ -57,3 +46,5 @@ PS5 source builds scale the port UI with output resolution (twice the native UI 
 To change a downloaded config before uploading it, add `--menu-size large` (or `x-large`) to `tools/configure-settings.py`. Close the title first.
 
 Controller menu navigation: **L1/R1** change the top-level tab; **L2/R2** change its sidebar section. Use D-pad/left stick to focus controls, Cross to activate, and Circle to cancel a selector or popup. Custom tabs/sections show a focus outline. Shoulder shortcuts pause while a control is being edited or a popup is open. Touchpad closes the menu.
+
+Select a sidebar section with **Cross** (or press **D-pad Right** while it is focused) to enter its first enabled control. **Circle** returns to the selected sidebar section when no selector/popup is open. **Triangle** focuses the power/reset/close action row; use D-pad left/right and Cross there. Circle cancels open selectors and confirmation prompts before returning to the sidebar.

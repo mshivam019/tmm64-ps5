@@ -11,6 +11,7 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("config", type=Path, help="existing 2ship2harkinian.json from the active UserData/sandbox")
     parser.add_argument("--hd-textures", choices=("on", "off"))
+    parser.add_argument("--camera-controls", choices=("on", "off"))
     parser.add_argument("--menu-size", choices=("small", "normal", "large", "x-large"))
     args = parser.parse_args()
     try:
@@ -33,6 +34,8 @@ def main():
             if not isinstance(mods, dict):
                 raise ValueError("CVars.gEnhancements.Mods must be an object")
             mods["AlternateAssets"] = int(args.hd_textures == "on")
+        if args.camera_controls:
+            settings["PS5CameraControls"] = int(args.camera_controls == "on")
         if args.menu_size:
             settings["ImGuiScale"] = {"small": 0, "normal": 1, "large": 2, "x-large": 3}[args.menu_size]
         output = json.dumps(data, indent=2, ensure_ascii=False) + "\n"
