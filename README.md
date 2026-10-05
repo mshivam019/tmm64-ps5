@@ -83,7 +83,7 @@ Follow the [HD texture/mod setup guide](docs/MODS.md) for the exact **2Ship O2R 
 
 The packaged executable has booted on PS5 firmware 9.00. Startup, HD archive loading and the pause-save configuration were checked, and the user confirmed the pause-save action works; a full playthrough and every save location have not been verified. Audio improved in an on-console check after correcting the playback address filter. Regression checks cover low-address audio notes, 64-bit message storage and exhausted sample positions. Music quality and all individual effects have not been exhaustively verified. Defensive audio checks remain enabled. If an audio guard triggers, preserve the title’s `mm-adpcm-range.txt` diagnostic when reporting the problem.
 
-The new menu/camera changes have been checked in source/build tooling but still need console testing. Earlier hardware results above refer to the released build. Save/configuration files use writable `/app0/UserData` where available, otherwise the title’s `/download0` sandbox. Preserve that data when updating; it is separate from the installed assets folder. Do not overwrite a running title.
+On October 5, 2026, the user confirmed the updated 2Ship build was tested on PS5, including the requested controller menu navigation and camera toggle check. Both source builds and executable integrity checks passed. This confirmation does not establish performance in every scene. Earlier hardware results above refer to the released build. Save/configuration files use writable `/app0/UserData` where available, otherwise the title’s `/download0` sandbox. Preserve that data when updating; it is separate from the installed assets folder. Do not overwrite a running title.
 
 ## Build validation
 

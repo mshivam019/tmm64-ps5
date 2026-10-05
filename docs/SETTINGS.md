@@ -1,6 +1,6 @@
 # Settings, language and camera controls
 
-These controls apply to source builds containing the touchpad change. The existing v1.0.0 download predates it. New menu/camera changes require PS5 testing before a binary release.
+These controls apply to source builds containing the touchpad change. The existing v1.0.0 download predates it. The user confirmed PS5 testing of the updated menu navigation and camera toggle on October 5, 2026.
 
 ## Open the port settings
 
