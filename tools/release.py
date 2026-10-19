@@ -51,11 +51,11 @@ def main():
             (title/'build-profile.json').write_text(json.dumps(receipt,indent=2)+'\n')
             subprocess.run(['bash', str(repo/'tools/check-build.sh'), '--dir', str(title), '--release', '--variant', a.variant], check=True)
             (root/'tools').mkdir()
-            for helper in ['check-build.sh', 'check-mods.py', 'configure-settings.py', 'index-mods.py']:
+            for helper in ['check-build.sh', 'check-mods.py', 'configure-settings.py', 'index-mods.py', 'install.py', 'ps5_install_lib.py', 'prepare-files.py', 'transfer-files.py', 'Prepare-Files-Windows.cmd', 'prepare-files.sh', 'INSTALL-HELPER-LICENSE']:
                 shutil.copy2(repo/'tools'/helper, root/'tools'/helper)
             shutil.copy2(repo/f'tools/install.{ext}',root/f'tools/install.{ext}')
             shutil.copy2(repo/'tools/import-save-label.py', root/'tools/import-save-label.py')
-            for name in ['README.md','LICENSE','THIRD-PARTY-NOTICES.md','sources.lock.json']:
+            for name in ['README.md','INSTALL.md','LICENSE','THIRD-PARTY-NOTICES.md','sources.lock.json']:
                 shutil.copy2(repo/name,root/name)
             shutil.copytree(repo/'docs',root/'docs')
             (root/'INSTALL.txt').write_text((repo/'docs/CONSOLE-SETUP.md').read_text())

@@ -1,3 +1,8 @@
+CURRENT INSTALLATION GUIDE: https://github.com/mshivam019/tmm64-ps5/blob/main/INSTALL.md
+Use that guide for internal/USB storage, offline copying or Wi-Fi FTP.
+M.2, Ethernet and PS5 Upload are optional. Paths in older instructions below
+describe the developer setup, not required hardware or transfer software.
+
 # Console setup
 
 Use a homebrew-capable PS5 with kstuff, ShadowMountPlus and an active FTP server. This installation uses `/mnt/ext1` for M.2 storage. The `etaHEN/games` directory name is historical; loading etaHEN is not required for this setup.

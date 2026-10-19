@@ -1,17 +1,31 @@
 param(
     [Parameter(Mandatory=$true)][string]$Src,
     [Parameter(Mandatory=$true)][string]$Console,
+    [string]$RemoteDir = '',
+    [string]$InstallRoot = '',
     [int]$FtpPort = 2121,
-    [string]$InstallRoot = '/mnt/ext1/etaHEN/games'
+    [string]$FtpUser = 'anonymous',
+    [string]$Data = '',
+    [switch]$Closed,
+    [switch]$ReplaceExisting,
+    [switch]$EbootOnly,
+    [switch]$NoLaunch,
+    [string]$Engine = ''
 )
 $ErrorActionPreference = 'Stop'
-$root = (Resolve-Path $Src).Path.TrimEnd([char[]]'\/')
-if (!(Test-Path "$root/eboot.bin")) { throw 'eboot.bin is missing' }
-$files = Get-ChildItem -LiteralPath $root -Recurse -File | Sort-Object @{Expression={ $_.Name -eq 'eboot.bin' }}, FullName
-foreach ($file in $files) {
-    $rel = $file.FullName.Substring($root.Length + 1).Replace('\','/')
-    & curl.exe --fail --silent --show-error --ftp-create-dirs --connect-timeout 15 -u 'anonymous:' -T $file.FullName "ftp://${Console}:${FtpPort}${InstallRoot}/PPSA99621/$rel"
-    if ($LASTEXITCODE -ne 0) { throw "Upload failed: $rel" }
-    Write-Host "Uploaded $rel"
+if (-not $RemoteDir -and -not $InstallRoot) {
+    throw 'Choose -RemoteDir (full installed title path) or -InstallRoot (loader parent folder). See INSTALL.md; M.2 is optional.'
 }
-Write-Host "Register/mount $InstallRoot/PPSA99621 with ShadowMountPlus."
+if ($RemoteDir -and $InstallRoot) { throw 'Choose only one destination form.' }
+$arguments = @("$PSScriptRoot/install.py", '--src', $Src, '--console', $Console,
+               '--ftp-port', $FtpPort, '--ftp-user', $FtpUser)
+if ($RemoteDir) { $arguments += @('--remote-dir', $RemoteDir) }
+if ($InstallRoot) { $arguments += @('--install-root', $InstallRoot) }
+if ($Data) { $arguments += @('--data', $Data) }
+if ($Closed) { $arguments += '--closed' }
+if ($ReplaceExisting) { $arguments += '--replace-existing' }
+if ($EbootOnly) { $arguments += '--eboot-only' }
+if (Get-Command py -ErrorAction SilentlyContinue) { & py -3 @arguments }
+elseif (Get-Command python -ErrorAction SilentlyContinue) { & python @arguments }
+else { throw 'Python 3.9+ is required for this optional helper. You can copy the prepared folder manually instead.' }
+if ($LASTEXITCODE -ne 0) { throw 'File transfer stopped; read the error above. No registration/launch was attempted.' }

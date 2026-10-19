@@ -1,5 +1,9 @@
 # Majora’s Mask: PS5 native port
 
+**[Start here: installation, USB/offline copying, Wi-Fi FTP and game-file locations](INSTALL.md).**
+M.2, Ethernet and PS5 Upload are optional. The guide also explains recovery after
+store updates; older packaged instructions may describe the developer's M.2 setup.
+
 A native PS5 port of **2 Ship 2 Harkinian 5.0.1**, built on the PS5 OpenGL runtime. Companion project to [Ocarina of Time for PS5](https://github.com/mshivam019/oot64-ps5).
 
 [Download the latest release](https://github.com/mshivam019/tmm64-ps5/releases/latest) · [Console setup](docs/CONSOLE-SETUP.md) · [Build from source](docs/BUILDING.md)
@@ -16,47 +20,33 @@ A native PS5 port of **2 Ship 2 Harkinian 5.0.1**, built on the PS5 OpenGL runti
 - PS5 audio playback fix for valid notes incorrectly silenced by an N64 memory-address check.
 - Pause saving enabled by default, subject to the game’s safe-save restrictions.
 - Optional alternate/HD assets, including MM Reloaded.
-- Native title **PPSA99621**, installed on the M.2 drive with kstuff and ShadowMountPlus. etaHEN is not required for this setup.
+- Native title **PPSA99621**, tested on M.2 with kstuff and ShadowMountPlus; a loader-supported internal/USB location is also a deployment option. etaHEN is not required for this setup.
 
 ## Requirements
 
-- A homebrew-capable PS5 with kstuff, ShadowMountPlus and an active FTP server.
+- A homebrew-capable PS5 with compatible native folder-title support and a file-copy method (USB/file manager or FTP).
 - Your own supported Majora’s Mask ROM, extracted with official 2Ship 5.0.1 on your PC.
 - About 200 MB of free space for the base title; about 3 GB extra for the optional MM Reloaded HD pack.
-- Windows PowerShell with `curl.exe`, or Linux with Bash and `curl`, for the optional upload helper. Any FTP client also works.
+- Python 3.9+ only if using the optional file helper. Manual USB/file-manager copying or your own FTP client does not need Python.
 
 ## Installation
 
-From a [release](https://github.com/mshivam019/tmm64-ps5/releases), with no compiling:
+1. Install `PPSA99621.zip` from the release/ProsperoStore, or unpack the complete
+   precompiled app folder for manual copying. No PS5 compilation is needed.
+2. Let [desktop 2Ship 5.0.1](https://github.com/2ship2harkinian/2ship2harkinian/releases/tag/5.0.1) extract your supported ROM; close it and copy `mm.o2r`.
+3. With the PS5 game closed, put `mm.o2r` in the installed title's `assets/`
+   folder. Use USB plus your console file manager, Wi-Fi FTP, Ethernet FTP or
+   your preferred copy method. Choose your loader's location; M.2 is optional.
+4. For a new manual installation, refresh/mount/register the whole title folder
+   with your existing loader. Start the home-screen tile.
 
-1. Download the archive for your PC (`-windows.zip` or `-linux.zip`), extract it
-   and open a terminal in the extracted folder.
-2. Create `mm.o2r` from your own ROM with the official
-   [2 Ship 2 Harkinian 5.0.1](https://github.com/HarbourMasters/2ship2harkinian/releases/tag/5.0.1)
-   PC build and put it in `output/PPSA99621/assets/` (the archive already includes
-   `2ship.o2r`). Close the desktop game after extraction finishes.
-3. Get the `output/PPSA99621` folder onto the console, e.g. at
-   `/mnt/ext1/etaHEN/games/PPSA99621`, and register/mount it with ShadowMountPlus.
-   Use whatever you already use (any FTP client such as FileZilla or WinSCP,
-   PS5Upload, …); the `install` helpers below are optional.
-4. Start **2 Ship 2 Harkinian** from the home screen.
-
-**Windows** (PowerShell; register/mount the folder afterwards):
-
-```powershell
-powershell -ExecutionPolicy Bypass -File tools\install.ps1 -Src .\output\PPSA99621 -Console <console-ip>
-```
-
-**Linux** (needs `curl`; register/mount the folder afterwards):
-
-```sh
-bash tools/install.sh --src output/PPSA99621 --console <console-ip>
-```
-
-The archive’s `INSTALL.txt` repeats these steps.
-
-Building from source instead is covered in [docs/BUILDING.md](docs/BUILDING.md).
-For HD textures and the optional OOT Save label, see [Console setup](docs/CONSOLE-SETUP.md).
+[INSTALL.md](INSTALL.md) has exact file layouts, the optional separate prepare
+and transfer helpers, storage choices and recovery after store updates.
+The Windows/Linux archives contain the same PS5 application; their older
+`INSTALL.txt` may describe the developer's M.2 setup. Current optional helpers
+require Python 3.9+; direct copying requires neither Python nor PS5 Upload.
+See [mods and controller prompts](docs/MODS.md) for optional texture packs and
+[building](docs/BUILDING.md) only if you want to compile the port yourself.
 
 **120 Hz:** the release is the `2160p120` build. It asks for 120 Hz output when the
 display supports it and otherwise stays at 60 Hz. New source builds fix interpolation at **60 FPS**. Full-game frame-rate performance and 120 Hz output remain unverified.
